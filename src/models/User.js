@@ -12,7 +12,7 @@ const baseUserSchema = new mongoose.Schema(
     password: {
       type: String,
       required: true,
-      select: false,
+      // select: false,
     },
     fullName: {
       type: String,
@@ -28,11 +28,11 @@ const baseUserSchema = new mongoose.Schema(
       enum: ['admin', 'staff', 'graduate'],
       required: true,
     },
-    refreshTokens: [{
+    refreshToken: {
       token: { type: String },
       createdAt: { type: Date, default: Date.now },
       expiresAt: { type: Date }
-    }],
+    },
   },
   {
     timestamps: true,

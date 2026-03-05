@@ -1,167 +1,105 @@
-import bcrypt from 'bcryptjs';
-import jwt from 'jsonwebtoken';
-import User from '../models/User.js';        
-import Graduate from '../models/Graduate.js';
-// import Staff from '../models/Staff.js';   // later
+import User from "../models/User.js"
+import Graduate from "../models/Graduate.js"
+import bcrypt from "bcrypt"
+import jwt from "jsonwebtoken"
+import {
+  generateAccessToken,
+  generateRefreshToken,
+} from "../utils/generateTokens.js"
 
-// Helper to generate tokens
-const generateAccessToken = (user) => {
-  return jwt.sign(
-    { id: user._id, role: user.role },
-    process.env.JWT_ACCESS_SECRET,
-    { expiresIn: process.env.ACCESS_TOKEN_EXPIRY || '15m' }
-  );
-};
+const cookieOptions = {
+  httpOnly: true,
+  secure: false, // true in production
+  sameSite: "strict",
+}
 
-const generateRefreshToken = (user) => {
-  return jwt.sign(
-    { id: user._id },
-    process.env.JWT_REFRESH_SECRET,
-    { expiresIn: process.env.REFRESH_TOKEN_EXPIRY || '7d' }
-  );
-};
+export const register = async (req, res) => {
+  const { fullName, email, phone, password } = req.body
+  const hashedPassword = await bcrypt.hash(password, 10)
 
-// SIGN UP (example: graduate registration – adapt for staff/admin)
-export const registerGraduate = async (req, res) => {
-  try {
-    const {
-      email, password, fullName, phone
-    } = req.body;
+  const user = await Graduate.create({
+    fullName,
+    email,
+    phone,
+    password: hashedPassword,
+    role: 'graduate',
+  })
 
-    // Basic validation (add express-validator later if needed)
-    if (!email || !password || password.length < 6) {
-      return res.status(400).json({ message: 'Invalid input' });
-    }
+  res.status(201).json({ message: "User created" })
+}
 
-    const existingUser = await User.findOne({ email });
-    if (existingUser) {
-      return res.status(400).json({ message: 'Email already exists' });
-    }
-
-    const hashedPassword = await bcrypt.hash(password, 12);
-
-    const graduate = new Graduate({
-      email,
-      password: hashedPassword,
-      fullName,
-      phone,
-      role: 'graduate' // auto-set by discriminator, but explicit is fine
-    });
-
-    await graduate.save();
-
-    // Optional: auto-login after register
-    const accessToken = generateAccessToken(graduate);
-    const refreshToken = generateRefreshToken(graduate);
-
-    // Store refresh token (simple version: overwrite previous)
-    graduate.refreshTokens = [{ token: refreshToken }];
-    await graduate.save();
-
-    // Set HttpOnly cookie for refresh token
-    res.cookie('refreshToken', refreshToken, {
-      httpOnly: true,
-      secure: process.env.NODE_ENV === 'production', // true in prod (HTTPS)
-      sameSite: 'strict',
-      maxAge: 7 * 24 * 60 * 60 * 1000 // 7 days in ms
-    });
-
-    res.status(201).json({
-      accessToken,
-      user: {
-        id: graduate._id,
-        email: graduate.email,
-        fullName: graduate.fullName,
-        role: graduate.role,
-      }
-    });
-  } catch (err) {
-    console.error(err);
-    res.status(500).json({ message: 'Server error' });
-  }
-};
-
-// SIGN IN (login – works for any role)
 export const login = async (req, res) => {
-  try {
-    const { email, password } = req.body;
+  const { email, password } = req.body
+  const user = await User.findOne({ email })
+  if (!user) return res.status(401).json({ message: "Invalid credentials" })
 
-    const user = await User.findOne({ email }).select('+password');
-    if (!user) {
-      return res.status(401).json({ message: 'Invalid credentials' });
-    }
+  const valid = await bcrypt.compare(password, user.password)
+  if (!valid) return res.status(401).json({ message: "Invalid credentials" })
 
-    const isMatch = await bcrypt.compare(password, user.password);
-    if (!isMatch) {
-      return res.status(401).json({ message: 'Invalid credentials' });
-    }
+  const accessToken = generateAccessToken(user)
+  const refreshToken = generateRefreshToken(user)
 
-    const accessToken = generateAccessToken(user);
-    const refreshToken = generateRefreshToken(user);
-
-    // Update refresh token (rotation: replace old one)
-    user.refreshTokens = [{ token: refreshToken }];
-    await user.save();
-
-    res.cookie('refreshToken', refreshToken, {
-      httpOnly: true,
-      secure: process.env.NODE_ENV === 'production',
-      sameSite: 'strict',
-      maxAge: 7 * 24 * 60 * 60 * 1000
-    });
-
-    res.json({
-      accessToken,
-      user: {
-        id: user._id,
-        email: user.email,
-        fullName: user.fullName,
-        role: user.role
-      }
-    });
-  } catch (err) {
-    console.error(err);
-    res.status(500).json({ message: 'Server error' });
+  // Store single refresh token
+  user.refreshToken = {
+    token: await bcrypt.hash(refreshToken, 10),
+    createdAt: new Date(),
+    expiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000) // optional: 7 days expiry
   }
-};
+  await user.save()
 
-// REFRESH TOKEN endpoint (get new access token)
-export const refreshToken = async (req, res) => {
-  const refreshToken = req.cookies.refreshToken;
-  if (!refreshToken) return res.sendStatus(401);
+  res.cookie("refreshToken", refreshToken, cookieOptions)
+  res.json({ accessToken })
+}
 
+export const refresh = async (req, res) => {
+  const token = req.cookies.refreshToken
+  if (!token) return res.sendStatus(401)
+
+  let decoded
   try {
-    const decoded = jwt.verify(refreshToken, process.env.JWT_REFRESH_SECRET);
-    const user = await User.findById(decoded.id);
-
-    if (!user || !user.refreshTokens.some(rt => rt.token === refreshToken)) {
-      return res.sendStatus(403); // forbidden – token invalid/revoked
-    }
-
-    const newAccessToken = generateAccessToken(user);
-
-    res.json({ accessToken: newAccessToken });
+    decoded = jwt.verify(token, process.env.JWT_REFRESH_SECRET)
   } catch (err) {
-    res.sendStatus(403);
+    return res.sendStatus(403)
   }
-};
 
-// LOGOUT (clear cookie + remove refresh token)
+  const user = await User.findById(decoded.userId)
+  if (!user || !user.refreshToken?.token) return res.sendStatus(403)
+
+  const valid = await bcrypt.compare(token, user.refreshToken.token)
+  if (!valid) return res.sendStatus(403)
+
+  // Generate new tokens
+  const newAccessToken = generateAccessToken(user)
+  const newRefreshToken = generateRefreshToken(user)
+
+  user.refreshToken = {
+    token: await bcrypt.hash(newRefreshToken, 10),
+    createdAt: new Date(),
+    expiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000)
+  }
+  await user.save()
+
+  res.cookie("refreshToken", newRefreshToken, cookieOptions)
+  res.json({ accessToken: newAccessToken })
+}
+
 export const logout = async (req, res) => {
-  const refreshToken = req.cookies.refreshToken;
-  if (refreshToken) {
-    // Optional: remove from DB
-    await User.updateOne(
-      { refreshTokens: { $elemMatch: { token: refreshToken } } },
-      { $pull: { refreshTokens: { token: refreshToken } } }
-    );
+  const token = req.cookies.refreshToken
+  if (!token) return res.sendStatus(204)
+
+  let decoded
+  try {
+    decoded = jwt.verify(token, process.env.JWT_REFRESH_SECRET)
+  } catch (err) {
+    return res.sendStatus(204)
   }
 
-  res.clearCookie('refreshToken', {
-    httpOnly: true,
-    secure: process.env.NODE_ENV === 'production',
-    sameSite: 'strict'
-  });
+  const user = await User.findById(decoded.userId)
+  if (user) {
+    user.refreshToken = null
+    await user.save()
+  }
 
-  res.json({ message: 'Logged out' });
-};
+  res.clearCookie("refreshToken")
+  res.sendStatus(204)
+}
