@@ -10,7 +10,7 @@ import {
 const cookieOptions = {
   httpOnly: true,
   secure: false, // true in production
-  sameSite: "strict",
+  sameSite: "lax",
 }
 
 export const register = async (req, res) => {
@@ -51,6 +51,38 @@ export const login = async (req, res) => {
   res.json({ accessToken })
 }
 
+// export const refresh = async (req, res) => {
+//   const token = req.cookies.refreshToken
+//   if (!token) return res.sendStatus(401)
+
+//   let decoded
+//   try {
+//     decoded = jwt.verify(token, process.env.JWT_REFRESH_SECRET)
+//   } catch (err) {
+//     return res.sendStatus(403)
+//   }
+
+//   const user = await User.findById(decoded.userId)
+//   if (!user || !user.refreshToken?.token) return res.sendStatus(403)
+
+//   const valid = await bcrypt.compare(token, user.refreshToken.token)
+//   if (!valid) return res.sendStatus(403)
+
+//   // Generate new tokens
+//   const newAccessToken = generateAccessToken(user)
+//   const newRefreshToken = generateRefreshToken(user)
+
+//   user.refreshToken = {
+//     token: await bcrypt.hash(newRefreshToken, 10),
+//     createdAt: new Date(),
+//     expiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000)
+//   }
+//   await user.save()
+
+//   res.cookie("refreshToken", newRefreshToken, cookieOptions)
+//   res.json({ accessToken: newAccessToken })
+// }
+
 export const refresh = async (req, res) => {
   const token = req.cookies.refreshToken
   if (!token) return res.sendStatus(401)
@@ -68,18 +100,9 @@ export const refresh = async (req, res) => {
   const valid = await bcrypt.compare(token, user.refreshToken.token)
   if (!valid) return res.sendStatus(403)
 
-  // Generate new tokens
+  // ✅ ONLY generate new access token
   const newAccessToken = generateAccessToken(user)
-  const newRefreshToken = generateRefreshToken(user)
 
-  user.refreshToken = {
-    token: await bcrypt.hash(newRefreshToken, 10),
-    createdAt: new Date(),
-    expiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000)
-  }
-  await user.save()
-
-  res.cookie("refreshToken", newRefreshToken, cookieOptions)
   res.json({ accessToken: newAccessToken })
 }
 

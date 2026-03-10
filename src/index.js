@@ -20,7 +20,7 @@ app.use(cors({
   credentials: true
 }));
 
-app.use(rateLimiter);
+// app.use(rateLimiter);
 app.use("/api/auth", authRoutes);
 
 connectDB();

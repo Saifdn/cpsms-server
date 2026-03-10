@@ -3,7 +3,7 @@ import mongoose from 'mongoose';
 
 const graduateSchema = new mongoose.Schema({
 
-  addresss: {
+  address: {
     type: String,
     trim: true,
   },
