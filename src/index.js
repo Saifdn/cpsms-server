@@ -3,6 +3,7 @@ import cors from "cors";
 import dotenv from "dotenv";
 import connectDB from "./config/db.js";
 import authRoutes from "./routes/authRoutes.js";
+import userRoutes from "./routes/userRoutes.js";
 import cookieParser from "cookie-parser";
 import helmet from "helmet";
 import rateLimiter from "./middleware/rateLimiter.js";
@@ -22,6 +23,7 @@ app.use(cors({
 
 // app.use(rateLimiter);
 app.use("/api/auth", authRoutes);
+app.use("/api/users", userRoutes);
 
 connectDB();
 

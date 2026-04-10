@@ -5,8 +5,8 @@ import mongoose from 'mongoose';
 const adminSchema = new mongoose.Schema({
   adminLevel: {
     type: String,
-    enum: ['super', 'manager'],
-    default: 'manager',
+    enum: ['super', 'admin'],
+    default: 'admin',
   },
 });
 

@@ -4,8 +4,9 @@ import mongoose from 'mongoose';
 const graduateSchema = new mongoose.Schema({
 
   address: {
-    type: String,
-    trim: true,
+    line1: { type: String, trim: true },
+    line2: { type: String, trim: true },
+    line3: { type: String, trim: true }
   },
   postcode: {
     type: String,

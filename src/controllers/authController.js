@@ -2,10 +2,12 @@ import User from "../models/User.js"
 import Graduate from "../models/Graduate.js"
 import bcrypt from "bcrypt"
 import jwt from "jsonwebtoken"
+import crypto from "crypto";
 import {
   generateAccessToken,
   generateRefreshToken,
 } from "../utils/generateTokens.js"
+import { sendEmail } from "../utils/sendEmail.js"
 
 const cookieOptions = {
   httpOnly: true,
@@ -126,3 +128,67 @@ export const logout = async (req, res) => {
   res.clearCookie("refreshToken")
   res.sendStatus(204)
 }
+
+export const forgotPassword = async (req, res) => {
+  const { email } = req.body;
+
+  const user = await User.findOne({ email });
+
+  if (!user) {
+    return res.json({
+      message: "If this email exists, a reset link has been sent",
+    });
+  }
+
+  const resetToken = crypto.randomBytes(32).toString("hex");
+
+  const hashedToken = crypto
+    .createHash("sha256")
+    .update(resetToken)
+    .digest("hex");
+
+  user.passwordResetToken = {
+    token: hashedToken,
+    expiresAt: Date.now() + 10 * 60 * 1000,   // 10 minutes
+  };
+
+  await user.save();
+
+  const resetUrl = `${process.env.CLIENT_URL}/reset-password/${resetToken}`;
+
+  await sendEmail(
+    user.email,
+    "Password Reset",
+    `Reset your password using this link: ${resetUrl}`
+  );
+
+  res.json({ message: "Reset link sent" });
+};
+
+export const resetPassword = async (req, res) => {
+  const { token } = req.params;
+  const { password } = req.body;
+
+  const hashedToken = crypto
+    .createHash("sha256")
+    .update(token)
+    .digest("hex");
+
+  const user = await User.findOne({
+    "passwordResetToken.token": hashedToken,
+    "passwordResetToken.expiresAt": { $gt: Date.now() },
+  });
+
+  if (!user) {
+    return res.status(400).json({ message: "Token invalid or expired" });
+  }
+
+  const hashedPassword = await bcrypt.hash(password, 10)
+
+  user.password = hashedPassword;
+  user.passwordResetToken = undefined;
+
+  await user.save();
+
+  res.json({ message: "Password reset successful" });
+};
