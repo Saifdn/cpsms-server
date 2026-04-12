@@ -5,12 +5,15 @@ import bcrypt from "bcrypt";
 import crypto from "crypto";
 import { sendEmail } from "../utils/sendEmail.js";
 
+const userProjection = "-refreshToken -password -passwordResetToken -__v";
+
 // ==================== GRADUATES CRUD ====================
 
 // Get all graduates - Simple version (no params)
 export const getAllGraduates = async (req, res) => {
   try {
     const graduates = await Graduate.find()
+      .select(userProjection)
       .sort({ createdAt: -1 });
 
     res.json({
@@ -29,7 +32,8 @@ export const getAllGraduates = async (req, res) => {
 // Get single graduate
 export const getGraduateById = async (req, res) => {
   try {
-    const graduate = await Graduate.findById(req.params.id);
+    const graduate = await Graduate.findById(req.params.id)
+      .select(userProjection);
     if (!graduate) {
       return res.status(404).json({ message: "Graduate not found" });
     }
@@ -160,6 +164,7 @@ export const deleteGraduate = async (req, res) => {
 export const getAllStaff = async (req, res) => {
   try {
     const staff = await Staff.find()
+      .select(userProjection)
       .sort({ createdAt: -1 });
 
     res.json({
@@ -179,7 +184,8 @@ export const getAllStaff = async (req, res) => {
 // Get single staff
 export const getStaffById = async (req, res) => {
   try {
-    const staff = await Staff.findById(req.params.id);
+    const staff = await Staff.findById(req.params.id)
+      .select(userProjection);
     if (!staff) {
       return res.status(404).json({ message: "Staff not found" });
     }
@@ -312,6 +318,7 @@ export const deleteStaff = async (req, res) => {
 export const getAllAdmins = async (req, res) => {
   try {
     const admins = await Admin.find()
+      .select(userProjection)
       .sort({ createdAt: -1 });
 
     res.json({
@@ -331,7 +338,8 @@ export const getAllAdmins = async (req, res) => {
 // Get single admin
 export const getAdminById = async (req, res) => {
   try {
-    const admin = await Admin.findById(req.params.id);
+    const admin = await Admin.findById(req.params.id)
+      .select(userProjection);
     if (!admin) {
       return res.status(404).json({ message: "Admin not found" });
     }
