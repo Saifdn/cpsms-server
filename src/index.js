@@ -5,6 +5,9 @@ import connectDB from "./config/db.js";
 import authRoutes from "./routes/authRoutes.js";
 import userRoutes from "./routes/userRoutes.js";
 import studioRoutes from "./routes/studioRoutes.js";
+import packageRoutes from "./routes/packageRoutes.js";
+import addonRoutes from "./routes/addonRoutes.js";
+import promoRoutes from "./routes/promoRoutes.js";
 import cookieParser from "cookie-parser";
 import helmet from "helmet";
 import rateLimiter from "./middleware/rateLimiter.js";
@@ -26,6 +29,9 @@ app.use(cors({
 app.use("/api/auth", authRoutes);
 app.use("/api/users", userRoutes);
 app.use("/api/studios", studioRoutes);
+app.use("/api/packages", packageRoutes);
+app.use("/api/addons", addonRoutes);
+app.use("/api/promos", promoRoutes);
 
 connectDB();
 
