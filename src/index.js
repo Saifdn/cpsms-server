@@ -2,12 +2,15 @@ import express from "express";
 import cors from "cors";
 import dotenv from "dotenv";
 import connectDB from "./config/db.js";
+
 import authRoutes from "./routes/authRoutes.js";
 import userRoutes from "./routes/userRoutes.js";
 import studioRoutes from "./routes/studioRoutes.js";
 import packageRoutes from "./routes/packageRoutes.js";
 import addonRoutes from "./routes/addonRoutes.js";
 import promoRoutes from "./routes/promoRoutes.js";
+import sessionRoutes from "./routes/sessionRoutes.js";
+
 import cookieParser from "cookie-parser";
 import helmet from "helmet";
 import rateLimiter from "./middleware/rateLimiter.js";
@@ -32,6 +35,7 @@ app.use("/api/studios", studioRoutes);
 app.use("/api/packages", packageRoutes);
 app.use("/api/addons", addonRoutes);
 app.use("/api/promos", promoRoutes);
+app.use("/api/sessions", sessionRoutes);
 
 connectDB();
 
