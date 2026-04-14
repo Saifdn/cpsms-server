@@ -10,6 +10,7 @@ import packageRoutes from "./routes/packageRoutes.js";
 import addonRoutes from "./routes/addonRoutes.js";
 import promoRoutes from "./routes/promoRoutes.js";
 import sessionRoutes from "./routes/sessionRoutes.js";
+import bookingRoutes from "./routes/bookingRoutes.js";
 
 import cookieParser from "cookie-parser";
 import helmet from "helmet";
@@ -36,6 +37,7 @@ app.use("/api/packages", packageRoutes);
 app.use("/api/addons", addonRoutes);
 app.use("/api/promos", promoRoutes);
 app.use("/api/sessions", sessionRoutes);
+app.use("/api/bookings", bookingRoutes);
 
 connectDB();
 
