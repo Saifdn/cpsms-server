@@ -25,7 +25,7 @@ const baseUserSchema = new mongoose.Schema(
     },
     role: {
       type: String,
-      enum: ['admin', 'staff', 'graduate'],
+      enum: ['superadmin', 'admin', 'staff', 'graduate'],
       required: true,
     },
     refreshToken: {
@@ -33,6 +33,11 @@ const baseUserSchema = new mongoose.Schema(
       createdAt: { type: Date, default: Date.now },
       expiresAt: { type: Date }
     },
+    passwordResetToken: {
+      token: {type: String },
+      createdAt: {type: Date, default: Date.now },
+      expiresAt: {type: Date }
+    }
   },
   {
     timestamps: true,
