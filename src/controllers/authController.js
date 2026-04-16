@@ -15,6 +15,11 @@ const cookieOptions = {
   sameSite: "lax",
 }
 
+if (process.env.NODE_ENV === "production") {
+  cookieOptions.secure = true,
+  cookieOptions.sameSite = "none"
+}
+
 export const register = async (req, res) => {
   const { fullName, email, phone, password } = req.body
   const hashedPassword = await bcrypt.hash(password, 10)
