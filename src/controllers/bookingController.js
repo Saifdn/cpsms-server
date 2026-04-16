@@ -49,6 +49,32 @@ export const getBookingById = async (req, res) => {
   }
 };
 
+// Used when scanning QR code (bookingNumber like "K70-20260415-001")
+export const getBookingByNumber = async (req, res) => {
+  try {
+    const { bookingNumber } = req.params;
+
+    const booking = await Booking.findOne({ bookingNumber })
+      .populate("graduate", "fullName email phone")
+      .populate("package", "name price")
+      .populate("session", "date startTime endTime");
+
+    if (!booking) {
+      return res.status(404).json({ 
+        success: false, 
+        message: `Booking with number ${bookingNumber} not found` 
+      });
+    }
+
+    res.json({ 
+      success: true, 
+      data: booking 
+    });
+  } catch (error) {
+    res.status(500).json({ success: false, message: "Server error" });
+  }
+};
+
 // Create new booking (usually done by system when graduate books)
 export const createBooking = async (req, res) => {
   const sessionId = req.body.session;

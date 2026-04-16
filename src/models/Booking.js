@@ -5,14 +5,13 @@ const bookingSchema = new mongoose.Schema(
   {
     bookingNumber: {
       type: String,
-    //   required: true,
       unique: true,
     },
 
     // Who booked
     graduate: {
       type: mongoose.Schema.Types.ObjectId,
-      ref: "graduate",
+      ref: "graduate", // discriminator
       required: true,
     },
 
@@ -30,33 +29,23 @@ const bookingSchema = new mongoose.Schema(
       required: true,
     },
 
-    // Where (filled after check-in)
-    studio: {
+    // 🔥 Link to queue (NEW)
+    queue: {
       type: mongoose.Schema.Types.ObjectId,
-      ref: "Studio",
+      ref: "Queue",
       default: null,
     },
 
-    // Booking Details
+    // User-facing status
     status: {
       type: String,
-      enum: ["booked", "confirmed", "checked-in", "completed", "cancelled"],
+      enum: ["booked", "checked-in", "in-progress", "completed", "cancelled"],
       default: "booked",
     },
 
     bookedAt: {
       type: Date,
       default: Date.now,
-    },
-
-    checkInTime: {
-      type: Date,
-      default: null,
-    },
-
-    checkOutTime: {
-      type: Date,
-      default: null,
     },
 
     notes: {
@@ -69,15 +58,19 @@ const bookingSchema = new mongoose.Schema(
   }
 );
 
-// Auto-generate booking number before saving
+// 🔥 Index for performance
+bookingSchema.index({ status: 1 });
+bookingSchema.index({ session: 1 });
+
+// 🔥 Auto-generate booking number
+// Auto-generate booking number
+// 🔥 Auto-generate booking number
 bookingSchema.pre("save", async function () {
   if (!this.bookingNumber) {
     const dateStr = format(new Date(), "yyyyMMdd");
-
-    const count = await mongoose.model("Booking").countDocuments({
+    const count = await this.constructor.countDocuments({
       bookingNumber: new RegExp(`^K70-${dateStr}`),
     });
-
     this.bookingNumber = `K70-${dateStr}-${String(count + 1).padStart(3, "0")}`;
   }
 });
