@@ -1,16 +1,19 @@
+// routes/queueRoutes.js
 import express from "express";
 import {
+  getActiveQueue,
   checkIn,
   callNext,
+  confirmArrival,
   checkOut,
-  getActiveQueue,
 } from "../controllers/queueController.js";
 
 const router = express.Router();
 
+router.get("/active", getActiveQueue);
 router.post("/checkin", checkIn);           // Registration Counter
-router.post("/call-next", callNext);        // When studio becomes free
-router.post("/checkout", checkOut);         // When user finishes
-router.get("/active", getActiveQueue);      // For waiting area screen
+router.post("/call-next", callNext);        // Studio Counter
+router.post("/confirm-arrival", confirmArrival); // Customer scan at studio
+router.post("/checkout", checkOut);         // Studio Counter
 
 export default router;
