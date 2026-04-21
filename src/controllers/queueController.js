@@ -1,6 +1,7 @@
 // controllers/queueController.js
 import Queue from "../models/Queue.js";
 import Booking from "../models/Booking.js";
+import Studio from "../models/Studio.js";
 import { broadcastQueueUpdate } from "../config/socket.js";
 
 // ====================== CHECK-IN (Registration Counter) ======================
@@ -79,43 +80,70 @@ export const callNext = async (req, res) => {
 };
 
 // ====================== CONFIRM ARRIVAL (Customer scans QR at studio) ======================
+// controllers/queueController.js
 export const confirmArrival = async (req, res) => {
   try {
     const { queueId } = req.body;
 
     if (!queueId) {
-      return res.status(400).json({ success: false, message: "queueId is required" });
+      return res.status(400).json({ 
+        success: false, 
+        message: "queueId is required" 
+      });
     }
 
+    // Find the queue entry and populate studio info if needed
     const queueEntry = await Queue.findById(queueId);
 
     if (!queueEntry) {
-      return res.status(404).json({ success: false, message: "Queue entry not found" });
+      return res.status(404).json({ 
+        success: false, 
+        message: "Queue entry not found" 
+      });
     }
 
     if (queueEntry.status !== "called") {
       return res.status(400).json({ 
         success: false, 
-        message: "Customer must be called first" 
+        message: "Customer must be called first before confirming arrival" 
       });
     }
 
+    // === Update Queue to "in-progress" ===
     queueEntry.status = "in-progress";
     queueEntry.startTime = new Date();
     await queueEntry.save();
 
-    await Booking.findByIdAndUpdate(queueEntry.booking, { status: "in-progress" });
+    // === Update Studio to Occupied ===
+    if (queueEntry.studio) {
+      await Studio.findByIdAndUpdate(
+        queueEntry.studio,
+        { isOccupied: true, currentBooking: queueEntry.booking },
+        { new: true }
+      );
+    }
 
+    // === Update Booking status ===
+    if (queueEntry.booking) {
+      await Booking.findByIdAndUpdate(queueEntry.booking, { 
+        status: "in-progress" 
+      });
+    }
+
+    // Broadcast live update to all clients
     await broadcastQueueUpdate();
 
     res.json({
       success: true,
-      message: "Arrival confirmed. Session started.",
+      message: "Arrival confirmed. Studio is now occupied.",
       data: queueEntry,
     });
   } catch (error) {
     console.error("Confirm Arrival Error:", error);
-    res.status(500).json({ success: false, message: "Failed to confirm arrival" });
+    res.status(500).json({ 
+      success: false, 
+      message: "Failed to confirm arrival" 
+    });
   }
 };
 
@@ -125,30 +153,55 @@ export const checkOut = async (req, res) => {
     const { queueId } = req.body;
 
     if (!queueId) {
-      return res.status(400).json({ success: false, message: "queueId is required" });
+      return res.status(400).json({ 
+        success: false, 
+        message: "queueId is required" 
+      });
     }
 
     const queueEntry = await Queue.findById(queueId);
 
     if (!queueEntry) {
-      return res.status(404).json({ success: false, message: "Queue entry not found" });
+      return res.status(404).json({ 
+        success: false, 
+        message: "Queue entry not found" 
+      });
     }
 
+    // 1. Update Queue status to completed
     queueEntry.status = "completed";
     queueEntry.endTime = new Date();
     await queueEntry.save();
 
-    await Booking.findByIdAndUpdate(queueEntry.booking, { status: "completed" });
+    // 2. Update Studio → isOccupied = false
+    if (queueEntry.studio) {
+      await Studio.findByIdAndUpdate(
+        queueEntry.studio,
+        { isOccupied: false, currentBooking: null },
+        { new: true }
+      );
+    }
 
+    // 3. Update Booking status
+    if (queueEntry.booking) {
+      await Booking.findByIdAndUpdate(queueEntry.booking, { 
+        status: "completed" 
+      });
+    }
+
+    // Broadcast live update to all clients
     await broadcastQueueUpdate();
 
     res.json({
       success: true,
-      message: "Check-out successful",
+      message: "Check-out successful. Studio is now free.",
     });
   } catch (error) {
     console.error("Check-out Error:", error);
-    res.status(500).json({ success: false, message: "Failed to check-out" });
+    res.status(500).json({ 
+      success: false, 
+      message: "Failed to check-out" 
+    });
   }
 };
 
