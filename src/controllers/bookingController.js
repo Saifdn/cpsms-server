@@ -14,7 +14,7 @@ export const getAllBookings = async (req, res) => {
       .populate("graduate", "fullName email phone")
       .populate("package", "name price")
       .populate("session", "date startTime endTime")
-      .populate("studio", "name location")
+      // .populate("studio", "name location")
       .sort({ bookedAt: -1 });
 
     res.json({

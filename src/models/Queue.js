@@ -78,6 +78,7 @@ queueSchema.statics.getActiveQueue = async function () {
     status: { $in: ["waiting", "called", "in-progress"] },
   })
     .sort({ queueNumber: 1 })
+    .populate("studio", "name location")
     .populate({
       path: "booking",
       populate: [

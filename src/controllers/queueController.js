@@ -1,8 +1,10 @@
+// controllers/queueController.js
 import Queue from "../models/Queue.js";
 import Booking from "../models/Booking.js";
 import Studio from "../models/Studio.js";
+import { broadcastQueueUpdate } from "../config/socket.js";
 
-// ====================== CHECK-IN ======================
+// ====================== CHECK-IN (Registration Counter) ======================
 export const checkIn = async (req, res) => {
   try {
     const { bookingNumber } = req.body;
@@ -11,152 +13,209 @@ export const checkIn = async (req, res) => {
       return res.status(400).json({ success: false, message: "bookingNumber is required" });
     }
 
-    const booking = await Booking.findOne({ bookingNumber });
+    const booking = await Booking.findOne({ bookingNumber })
+      .populate("graduate", "fullName email phone");
+
     if (!booking) {
-      return res.status(404).json({ success: false, message: `Booking ${bookingNumber} not found` });
+      return res.status(404).json({ success: false, message: "Booking not found" });
     }
 
-    if (booking.status === "checked-in" || booking.status === "in-progress") {
-      return res.status(400).json({ success: false, message: "Booking already checked in" });
+    // Prevent duplicate check-in
+    const existing = await Queue.findOne({ booking: booking._id });
+    if (existing) {
+      return res.status(400).json({ success: false, message: "This booking is already checked in" });
     }
 
     const queueEntry = await Queue.create({
       booking: booking._id,
-      studio: null,
       status: "waiting",
-      checkInTime: new Date(),
     });
 
     booking.status = "checked-in";
-    booking.queue = queueEntry._id;
-    booking.checkInTime = new Date();
     await booking.save();
 
-    res.status(201).json({
+    await broadcastQueueUpdate();
+
+    res.json({
       success: true,
       message: "Check-in successful",
-      queueNumber: queueEntry.queueNumber,
-      data: { booking, queue: queueEntry }
+      data: queueEntry,
     });
-
   } catch (error) {
-    console.error("Check-in error:", error);
-    res.status(500).json({ 
-      success: false, 
-      message: "Server error during check-in",
-      error: error.message 
-    });
+    console.error("Check-in Error:", error);
+    res.status(500).json({ success: false, message: "Server error during check-in" });
   }
 };
 
-// ====================== CALL NEXT ======================
-// Called when a studio becomes available (after previous user checks out)
+// ====================== CALL NEXT (Studio Counter) ======================
 export const callNext = async (req, res) => {
   try {
     const { studioId } = req.body;
 
-    // 1. Find the next waiting person
-    const nextQueue = await Queue.getNextWaiting()
-      .populate({
-        path: "booking",
-        populate: [
-          { path: "graduate", select: "fullName email" },
-          { path: "package", select: "name" }
-        ]
-      });
-
-    if (!nextQueue) {
-      return res.json({ success: true, message: "No one is waiting in queue" });
+    if (!studioId) {
+      return res.status(400).json({ success: false, message: "studioId is required" });
     }
 
-    // 2. Assign studio to this queue
+    const nextQueue = await Queue.getNextWaiting();
+
+    if (!nextQueue) {
+      return res.status(404).json({ success: false, message: "No customers waiting in queue" });
+    }
+
+    nextQueue.status = "called";
     nextQueue.studio = studioId;
-    nextQueue.status = "called";        // or "in-progress"
-    nextQueue.startTime = new Date();
     await nextQueue.save();
 
-    // 3. Update Studio status to occupied
-    await Studio.findByIdAndUpdate(studioId, { 
-      isAvailable: false,
-      currentQueue: nextQueue._id 
-    });
-
-    // 4. Update Booking status
-    await Booking.findByIdAndUpdate(nextQueue.booking, {
-      status: "in-progress",
-      checkInTime: nextQueue.checkInTime
-    });
+    await broadcastQueueUpdate();
 
     res.json({
       success: true,
-      message: `Called queue number ${nextQueue.queueNumber}`,
+      message: "Next customer called successfully",
       data: nextQueue,
     });
   } catch (error) {
-    console.error(error);
-    res.status(500).json({ success: false, message: "Failed to call next" });
+    console.error("Call Next Error:", error);
+    res.status(500).json({ success: false, message: "Failed to call next customer" });
+  }
+};
+
+// ====================== CONFIRM ARRIVAL (Customer scans QR at studio) ======================
+// controllers/queueController.js
+export const confirmArrival = async (req, res) => {
+  try {
+    const { queueId } = req.body;
+
+    if (!queueId) {
+      return res.status(400).json({ 
+        success: false, 
+        message: "queueId is required" 
+      });
+    }
+
+    // Find the queue entry and populate studio info if needed
+    const queueEntry = await Queue.findById(queueId);
+
+    if (!queueEntry) {
+      return res.status(404).json({ 
+        success: false, 
+        message: "Queue entry not found" 
+      });
+    }
+
+    if (queueEntry.status !== "called") {
+      return res.status(400).json({ 
+        success: false, 
+        message: "Customer must be called first before confirming arrival" 
+      });
+    }
+
+    // === Update Queue to "in-progress" ===
+    queueEntry.status = "in-progress";
+    queueEntry.startTime = new Date();
+    await queueEntry.save();
+
+    // === Update Studio to Occupied ===
+    if (queueEntry.studio) {
+      await Studio.findByIdAndUpdate(
+        queueEntry.studio,
+        { isOccupied: true, currentBooking: queueEntry.booking },
+        { new: true }
+      );
+    }
+
+    // === Update Booking status ===
+    if (queueEntry.booking) {
+      await Booking.findByIdAndUpdate(queueEntry.booking, { 
+        status: "in-progress" 
+      });
+    }
+
+    // Broadcast live update to all clients
+    await broadcastQueueUpdate();
+
+    res.json({
+      success: true,
+      message: "Arrival confirmed. Studio is now occupied.",
+      data: queueEntry,
+    });
+  } catch (error) {
+    console.error("Confirm Arrival Error:", error);
+    res.status(500).json({ 
+      success: false, 
+      message: "Failed to confirm arrival" 
+    });
   }
 };
 
 // ====================== CHECK-OUT ======================
-// When user finishes session
 export const checkOut = async (req, res) => {
   try {
     const { queueId } = req.body;
 
-    const queue = await Queue.findById(queueId);
-    if (!queue) {
-      return res.status(404).json({ success: false, message: "Queue entry not found" });
-    }
-
-    // 1. Mark queue as completed
-    queue.status = "completed";
-    queue.endTime = new Date();
-    await queue.save();
-
-    // 2. Free the studio
-    if (queue.studio) {
-      await Studio.findByIdAndUpdate(queue.studio, {
-        isAvailable: true,
-        currentQueue: null
+    if (!queueId) {
+      return res.status(400).json({ 
+        success: false, 
+        message: "queueId is required" 
       });
     }
 
-    // 3. Mark booking as completed
-    await Booking.findByIdAndUpdate(queue.booking, {
-      status: "completed",
-      checkOutTime: new Date()
-    });
+    const queueEntry = await Queue.findById(queueId);
 
-    // 4. Automatically call next person (optional but recommended)
-    // You can call callNext() here if you want automatic flow
+    if (!queueEntry) {
+      return res.status(404).json({ 
+        success: false, 
+        message: "Queue entry not found" 
+      });
+    }
+
+    // 1. Update Queue status to completed
+    queueEntry.status = "completed";
+    queueEntry.endTime = new Date();
+    await queueEntry.save();
+
+    // 2. Update Studio → isOccupied = false
+    if (queueEntry.studio) {
+      await Studio.findByIdAndUpdate(
+        queueEntry.studio,
+        { isOccupied: false, currentBooking: null },
+        { new: true }
+      );
+    }
+
+    // 3. Update Booking status
+    if (queueEntry.booking) {
+      await Booking.findByIdAndUpdate(queueEntry.booking, { 
+        status: "completed" 
+      });
+    }
+
+    // Broadcast live update to all clients
+    await broadcastQueueUpdate();
 
     res.json({
       success: true,
-      message: "Check-out successful. Studio is now available.",
+      message: "Check-out successful. Studio is now free.",
     });
   } catch (error) {
-    console.error(error);
-    res.status(500).json({ success: false, message: "Server error during check-out" });
+    console.error("Check-out Error:", error);
+    res.status(500).json({ 
+      success: false, 
+      message: "Failed to check-out" 
+    });
   }
 };
 
-// Get current active queue (for waiting screen)
+// ====================== GET ACTIVE QUEUE ======================
 export const getActiveQueue = async (req, res) => {
   try {
-    const activeQueue = await Queue.getActiveQueue();   // ← This now uses the static
-
+    const activeQueue = await Queue.getActiveQueue();
     res.json({
       success: true,
       data: activeQueue,
       count: activeQueue.length,
     });
   } catch (error) {
-    console.error("getActiveQueue Error:", error);   // ← Important for debugging
-    res.status(500).json({
-      success: false,
-      message: "Server error while fetching active queue",
-      error: error.message,   // Remove in production
-    });
+    console.error("getActiveQueue Error:", error);
+    res.status(500).json({ success: false, message: "Server error" });
   }
 };

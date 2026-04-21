@@ -9,30 +9,31 @@ export const initSocket = (httpServer) => {
       origin: process.env.CLIENT_URL || "http://localhost:5173",
       methods: ["GET", "POST"],
       credentials: true,
+      allowedHeaders: ["Content-Type", "Authorization"]
     },
+    transports: ["websocket", "polling"]   // ← Add this line
   });
 
   ioInstance.on("connection", (socket) => {
-    console.log(`🔌 Socket.IO Client connected: ${socket.id}`);
+  console.log(`🔌 Client connected: ${socket.id}`);
 
-    socket.on("disconnect", () => {
-      console.log(`🔌 Socket.IO Client disconnected: ${socket.id}`);
-    });
+  // Client requests latest queue data
+  socket.on("requestQueueUpdate", async () => {
+    console.log("📥 Client requested latest queue data");
+    await broadcastQueueUpdate();
   });
 
-  console.log("✅ Socket.IO initialized");
+  socket.on("disconnect", () => {
+    console.log(`🔌 Client disconnected: ${socket.id}`);
+  });
+});
+
+  console.log("✅ Socket.IO initialized with WebSocket + Polling");
   return ioInstance;
 };
 
-// Getter to access io from anywhere
-export const getIO = () => {
-  if (!ioInstance) {
-    console.warn("Socket.IO has not been initialized yet!");
-  }
-  return ioInstance;
-};
+export const getIO = () => ioInstance;
 
-// Broadcast queue updates to all connected clients
 export const broadcastQueueUpdate = async () => {
   const io = getIO();
   if (!io) return;
@@ -45,11 +46,8 @@ export const broadcastQueueUpdate = async () => {
       success: true,
       data: activeQueue,
       count: activeQueue.length,
-      timestamp: new Date().toISOString(),
     });
-
-    console.log(`📡 Broadcasted queue update - ${activeQueue.length} items`);
   } catch (error) {
-    console.error("❌ Error broadcasting queue update:", error);
+    console.error("Broadcast error:", error.message);
   }
 };

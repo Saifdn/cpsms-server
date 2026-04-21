@@ -1,12 +1,12 @@
+// index.js  (or server.js)
 import express from "express";
+import http from "http";
 import cors from "cors";
 import dotenv from "dotenv";
-import http from "http";
 
 import connectDB from "./config/db.js";
-import { initSocket } from "./config/socket.js";   // your socket config
+import { initSocket } from "./config/socket.js";
 
-// Import routes
 import authRoutes from "./routes/authRoutes.js";
 import userRoutes from "./routes/userRoutes.js";
 import studioRoutes from "./routes/studioRoutes.js";
@@ -24,23 +24,23 @@ dotenv.config();
 
 const app = express();
 
-// Middleware
 app.use(helmet());
 app.use(cookieParser());
 app.use(express.json());
 
 app.use(cors({
-  origin: process.env.CLIENT_URL,
+  origin: process.env.CLIENT_URL || "http://localhost:5173",
   credentials: true
 }));
 
-// ==================== IMPORTANT: Connect to DB FIRST ====================
+app.get("/", (req, res) => res.send("CPSMS API Running"));
+
+// Register routes AFTER DB connection
 const startServer = async () => {
   try {
-    await connectDB();           // ← Wait for DB connection
-    console.log("✅ MongoDB Connected Successfully");
+    await connectDB();
+    console.log("✅ MongoDB Connected");
 
-    // Now register routes (after DB is connected)
     app.use("/api/auth", authRoutes);
     app.use("/api/users", userRoutes);
     app.use("/api/studios", studioRoutes);
@@ -51,23 +51,19 @@ const startServer = async () => {
     app.use("/api/bookings", bookingRoutes);
     app.use("/api/queue", queueRoutes);
 
-    app.get("/", (req, res) => {
-      res.send("CPSMS API Running");
-    });
-
-    // Create HTTP server + Socket.IO
+    // === CRITICAL: Create HTTP server FIRST ===
     const httpServer = http.createServer(app);
-    initSocket(httpServer);
+    initSocket(httpServer);           // ← Socket.IO must be attached here
 
     const PORT = process.env.PORT || 8000;
 
     httpServer.listen(PORT, () => {
-      console.log(`🚀 Server running on port ${PORT}`);
-      console.log(`🔌 Socket.IO is ready`);
+      console.log(`🚀 Server running on http://localhost:${PORT}`);
+      console.log(`🔌 Socket.IO ready`);
     });
 
   } catch (error) {
-    console.error("❌ Failed to start server:", error.message);
+    console.error("Server failed to start:", error);
     process.exit(1);
   }
 };
