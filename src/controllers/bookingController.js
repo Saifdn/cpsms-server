@@ -239,3 +239,63 @@ export const cancelBooking = async (req, res) => {
     res.status(500).json({ success: false, message: "Server error" });
   }
 };
+
+export const billplzCallback = async (req, res) => {
+  try {
+    const {
+      id,                    
+      paid_amount,
+      paid_at,
+      paid,                  
+    } = req.body;
+
+    console.log("📨 Billplz Callback Received:", req.body);
+
+    if (!id) {
+      return res.status(400).json({ success: false, message: "No bill id provided" });
+    }
+
+    const payment = await Payment.findOne({ gatewayTransactionId: id });
+    if (!payment) {
+      return res.status(404).json({ success: false, message: "Payment not found" });
+    }
+
+    const booking = await Booking.findById(payment.booking).populate("session");
+    if (!booking) {
+      return res.status(404).json({ success: false, message: "Booking not found" });
+    }
+
+    const { session } = booking;
+    if (!session) {
+      return res.status(404).json({ success: false, message: "Session not found" });
+    }
+
+    const isPaid = paid === "true";
+    const wasAlreadyPaid = payment.paymentStatus === "paid" || booking.paymentStatus === "paid";
+
+    payment.paidAmount = paid_amount ? paid_amount / 100 : 0;
+    payment.paymentStatus = isPaid ? "paid" : "failed";
+    if (isPaid) payment.paidAt = new Date();
+    await payment.save();
+
+    // Update booking status
+    if (isPaid) {
+      booking.status = "booked";
+      booking.paymentStatus = "paid";
+      if (!wasAlreadyPaid) {
+        session.bookedCount += 1;
+        session.status = session.bookedCount >= session.capacity ? "full" : "available";
+        await session.save();
+      }
+    } else {
+      booking.status = "pending";
+      booking.paymentStatus = "failed";
+    }
+
+    await booking.save();
+
+    res.status(200).json({ success: true, message: "Callback processed successfully" });
+  } catch (error) {
+    res.status(500).json({ success: false, message: "Internal server error" });
+  }
+};
