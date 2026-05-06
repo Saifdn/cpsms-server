@@ -2,14 +2,17 @@ import express from "express";
 import {
   getAllBookings,
   getBookingById,
-  getBookingByNumber,     // ← New
+  getBookingByNumber,
   createBooking,
   updateBooking,
   cancelBooking,
   // checkInBooking,          // ← New for registration counter
 } from "../controllers/bookingController.js";
+import { verifyAccessToken } from "../middleware/authMiddleware.js";
 
 const router = express.Router();
+
+router.use(verifyAccessToken);
 
 // Public / General routes
 router.get("/", getAllBookings);

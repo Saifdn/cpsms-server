@@ -1,5 +1,10 @@
 import Booking from "../models/Booking.js";
 import Session from "../models/Session.js";
+import axios from "axios";
+import Payment from "../models/Payment.js";
+import Graduate from "../models/Graduate.js";
+import Package from "../models/Package.js";
+import Addon from "../models/Addon.js";
 
 // Get all bookings (with optional filters)
 export const getAllBookings = async (req, res) => {
@@ -75,48 +80,123 @@ export const getBookingByNumber = async (req, res) => {
   }
 };
 
-// Create new booking (usually done by system when graduate books)
 export const createBooking = async (req, res) => {
-  const sessionId = req.body.session;
-
   try {
-    // 1. Find session
-    const session = await Session.findById(sessionId);
+    const { graduate: graduateId, package: packageId, session: sessionId, addons = [], notes } = req.body;
+    // const graduateId = req.user.id;
 
-    if (!session) {
-      return res.status(404).json({
-        success: false,
-        message: "Session not found",
-      });
+    // 1. Fetch Package price + Addons prices
+    const packageData = await Package.findById(packageId);
+    if (!packageData) {
+      return res.status(404).json({ success: false, message: "Package not found" });
     }
 
-    // 2. Check capacity
-    if (session.bookedCount >= session.capacity) {
-      return res.status(400).json({
-        success: false,
-        message: "Session is fully booked",
-      });
+    let totalAmount = packageData.price;
+
+    // Add addons price if any
+    if (addons && addons.length > 0) {
+      const addonData = await Addon.find({ _id: { $in: addons } });
+      const addonTotal = addonData.reduce((sum, addon) => sum + addon.price, 0);
+      totalAmount += addonTotal;
     }
 
-    // 3. Create booking
-    const booking = await Booking.create(req.body);
+    // 1. Create Booking (Draft)
+    const booking = await Booking.create({
+      graduate: graduateId,
+      package: packageId,
+      session: sessionId,
+      addons: addons,
+    });
 
-    // 4. Increment bookedCount
-    session.bookedCount += 1;
-    await session.save();
+    // 2. Create Payment Record
+    const payment = await Payment.create({
+      booking: booking._id,
+      amount: totalAmount,
+      gateway: "billplz",
+      paymentStatus: "pending",
+    });
+
+    // 3. Call Billplz API
+    const billplzResponse = await axios.post(
+      "https://www.billplz-sandbox.com/api/v3/bills",
+      {
+        collection_id: process.env.BILLPLZ_COLLECTION_ID,
+        email: req.user.email,
+        name: req.user.fullName,
+        amount: totalAmount * 100,
+        description: `Booking #${booking.bookingNumber}`,
+        callback_url: process.env.BILLPLZ_CALLBACK_URL,
+        redirect_url: process.env.BILLPLZ_REDIRECT_URL,
+        reference_1_label: "Booking ID",
+        reference_1: booking.bookingNumber,
+      },
+      {
+        auth: {
+          username: process.env.BILLPLZ_API_KEY,
+          password: "",
+        },
+      }
+    );
+
+    // 4. Save Billplz URL to Payment
+    payment.paymentUrl = billplzResponse.data.url;
+    payment.gatewayTransactionId = billplzResponse.data.id;
+    await payment.save();
 
     res.status(201).json({
       success: true,
-      message: "Booking created successfully",
-      data: booking,
+      message: "Booking created. Redirecting to payment...",
+      paymentUrl: billplzResponse.data.url,
+      bookingId: booking._id,
     });
   } catch (error) {
-    res.status(400).json({
-      success: false,
-      message: error.message,
-    });
+    console.error(error);
+    res.status(500).json({ success: false, message: "Failed to create booking" });
   }
 };
+
+// Create new booking (usually done by system when graduate books)
+// export const createBooking = async (req, res) => {
+//   const sessionId = req.body.session;
+
+//   try {
+//     // 1. Find session
+//     const session = await Session.findById(sessionId);
+
+//     if (!session) {
+//       return res.status(404).json({
+//         success: false,
+//         message: "Session not found",
+//       });
+//     }
+
+//     // 2. Check capacity
+//     if (session.bookedCount >= session.capacity) {
+//       return res.status(400).json({
+//         success: false,
+//         message: "Session is fully booked",
+//       });
+//     }
+
+//     // 3. Create booking
+//     const booking = await Booking.create(req.body);
+
+//     // 4. Increment bookedCount
+//     session.bookedCount += 1;
+//     await session.save();
+
+//     res.status(201).json({
+//       success: true,
+//       message: "Booking created successfully",
+//       data: booking,
+//     });
+//   } catch (error) {
+//     res.status(400).json({
+//       success: false,
+//       message: error.message,
+//     });
+//   }
+// };
 
 // Update booking status (e.g., check-in, complete)
 export const updateBooking = async (req, res) => {

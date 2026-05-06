@@ -20,6 +20,8 @@ const queueSchema = new mongoose.Schema(
       required: true,
     },
 
+    position: Number,
+
     status: {
       type: String,
       enum: ["waiting", "called", "in-progress", "completed", "cancelled"],
