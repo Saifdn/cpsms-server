@@ -8,39 +8,53 @@ const bookingSchema = new mongoose.Schema(
       unique: true,
     },
 
-    // Who booked
     graduate: {
       type: mongoose.Schema.Types.ObjectId,
-      ref: "graduate", // discriminator
+      ref: "graduate",
       required: true,
     },
 
-    // What was booked
     package: {
       type: mongoose.Schema.Types.ObjectId,
       ref: "Package",
       required: true,
     },
 
-    // When
+    addons: [
+      {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: "Addon",
+      },
+    ],
+
     session: {
       type: mongoose.Schema.Types.ObjectId,
       ref: "Session",
       required: true,
     },
 
-    // 🔥 Link to queue (NEW)
+    // to be remove !!!
     queue: {
       type: mongoose.Schema.Types.ObjectId,
       ref: "Queue",
       default: null,
     },
 
-    // User-facing status
+    paymentStatus: {
+      type: String,
+      enum: [
+        "pending",
+        "paid",
+        "failed",
+        "refunded"
+      ],
+      default: "pending"
+    },
+
     status: {
       type: String,
-      enum: ["booked", "checked-in", "in-progress", "completed", "cancelled"],
-      default: "booked",
+      enum: ["pending", "booked", "checked-in", "in-progress", "completed", "cancelled"],
+      default: "pending",
     },
 
     bookedAt: {
@@ -61,6 +75,7 @@ const bookingSchema = new mongoose.Schema(
 // 🔥 Index for performance
 bookingSchema.index({ status: 1 });
 bookingSchema.index({ session: 1 });
+bookingSchema.index({ paymentStatus: 1 });
 
 // 🔥 Auto-generate booking number
 // Auto-generate booking number

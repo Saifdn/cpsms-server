@@ -23,6 +23,7 @@ const studioSchema = new mongoose.Schema(
       type: Boolean,
       default: false,
     },
+    // to be remove!!!!
     currentBooking: {
       type: mongoose.Schema.Types.ObjectId,
       ref: "Booking",
