@@ -6,6 +6,8 @@ import Graduate from "../models/Graduate.js";
 import Package from "../models/Package.js";
 import Addon from "../models/Addon.js";
 
+import crypto from "crypto";
+
 // Get all bookings (with optional filters)
 export const getAllBookings = async (req, res) => {
   try {
@@ -249,7 +251,15 @@ export const billplzCallback = async (req, res) => {
       paid,                  
     } = req.body;
 
-    console.log("📨 Billplz Callback Received:", req.body);
+    console.log("Billplz Callback Received:", req.body);
+
+    const xSignature = req.body.x_signature;
+
+    const isValidSignature = verifyBillplzSignature(req.body, xSignature, process.env.BILLPLZ_X_SIGNATURE);
+
+    if (!isValidSignature) {
+      return res.status(400).json({ success: false, message: "Invalid signature" });
+    }
 
     if (!id) {
       return res.status(400).json({ success: false, message: "No bill id provided" });
@@ -298,4 +308,30 @@ export const billplzCallback = async (req, res) => {
   } catch (error) {
     res.status(500).json({ success: false, message: "Internal server error" });
   }
+};
+
+const verifyBillplzSignature = (payload, xSignature, secretKey) => {
+  const data = { ...payload };
+
+  delete data.x_signature;
+
+  const sourceArray = Object.keys(data).map(
+    (key) => `${key}${data[key] ?? ""}`
+  );
+
+  sourceArray.sort();
+
+  const sourceString = sourceArray.join("|");
+
+  console.log("📌 Source String:", sourceString);
+
+  const generatedSignature = crypto
+    .createHmac("sha256", secretKey)
+    .update(sourceString)
+    .digest("hex");
+
+  console.log("Generated Signature:", generatedSignature);
+  console.log("Billplz Signature:", xSignature);
+
+  return generatedSignature === xSignature;
 };

@@ -16,6 +16,7 @@ import promoRoutes from "./routes/promoRoutes.js";
 import sessionRoutes from "./routes/sessionRoutes.js";
 import bookingRoutes from "./routes/bookingRoutes.js";
 import queueRoutes from "./routes/queueRoutes.js";
+import paymentRoutes from "./routes/paymentRoutes.js";
 
 import cookieParser from "cookie-parser";
 import helmet from "helmet";
@@ -51,6 +52,7 @@ const startServer = async () => {
     app.use("/api/sessions", sessionRoutes);
     app.use("/api/bookings", bookingRoutes);
     app.use("/api/queue", queueRoutes);
+    app.use("/api/payments", paymentRoutes);
 
     // === CRITICAL: Create HTTP server FIRST ===
     const httpServer = http.createServer(app);
