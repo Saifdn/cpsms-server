@@ -2,50 +2,53 @@ import mongoose from "mongoose";
 
 const shipmentSchema = new mongoose.Schema(
   {
-    // service_id: {
-    //   type: String,
-    //   trim: true,
-    // },
-    // collection_date: {
-    //     type: Date,
-    // },
-    // weight: {
-    //     type: Number,
-    // },
-    // height: {
-    //     type: Number,
-    // },
-    // width: {
-    //     type: Number,
-    // },
-    // length: {
-    //     type: Number,
-    // },
     booking: {
       type: mongoose.Schema.Types.ObjectId,
       ref: "Booking",
       required: true,
     },
+
+    // EasyParcel Response Fields
+    order_number: String,
+    awb_number: String,
+    label_url: String,
+    tracking_url: String,
+
+    serviceId: String,
+    serviceName: String,
+    courierName: String,
+
+    // EasyParcel Receiver Object - Match API exactly
     receiver: {
-      name: String,
-      phoneCode: String,
-      phoneNumber: String,
-      email: String,
-      address: {
-        line1: String,
-        line2: String,
-        postcode: String,
-        city: String,
-        subdivisionCode: String,
-        countryCode: String,
-      },
-    }
+      name: { type: String, required: true },
+      company: { type: String },
+      phone_number_country_code: { type: String, default: "MY" },
+      phone_number: { type: String, required: true },
+      email: { type: String },
+
+      address_1: { type: String, required: true },
+      address_2: { type: String },
+      postcode: { type: String, required: true },
+      city: { type: String, required: true },
+      subdivision_code: { type: String }, // e.g., "MY-07"
+      country_code: { type: String, default: "MY" },
+    },
+
+    // Internal status
+    status: {
+      type: String,
+      enum: [
+        "draft",
+        "submitted",
+        "shipped",
+        "delivered",
+        "failed",
+      ],
+      default: "draft",
+    },
   },
-  {
-    timestamps: true,
-  }
+  { timestamps: true },
 );
 
 const Shipment = mongoose.model("Shipment", shipmentSchema);
-
 export default Shipment;

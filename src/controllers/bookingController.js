@@ -5,8 +5,74 @@ import Payment from "../models/Payment.js";
 import Graduate from "../models/Graduate.js";
 import Package from "../models/Package.js";
 import Addon from "../models/Addon.js";
+import Shipment from "../models/Shipment.js";
+
+import { sendBookingConfirmation } from "../utils/sendBookingEmail.js";
 
 import crypto from "crypto";
+
+export const getMyBookings = async (req, res) => {
+  try {
+    const { status } = req.query;
+
+    const query = { graduate: req.user.userId };
+
+    if (status) {
+      query.status = status;
+    }
+
+    const bookings = await Booking.find(query)
+      .populate('package', 'name services price')
+      .populate('addons', 'name price')
+      .populate('session', 'date startTime endTime')
+      .select('package addons session paymentStatus status bookedAt bookingNumber')
+      .sort({ createdAt: -1 });
+
+    res.status(200).json({
+      success: true,
+      data: bookings,
+    });
+  } catch (error) {
+    console.error('Get My Bookings Error:', error);
+    res.status(500).json({
+      success: false,
+      message: "Server error while fetching your bookings",
+    });
+  }
+};
+
+export const getMyBookingById = async (req, res) => {
+  try {
+    const bookingId = req.params.id;
+
+    const booking = await Booking.findOne({
+      _id: bookingId,
+      graduate: req.user.userId
+    })
+      .populate('package', 'name services price')
+      .populate('addons', 'name price')
+      .populate('session', 'date startTime endTime')
+      .select('package addons session paymentStatus status bookedAt bookingNumber')
+
+    if (!booking) {
+      return res.status(404).json({
+        success: false,
+        message: "Booking not found or you don't have access to this booking"
+      });
+    }
+
+    res.status(200).json({
+      success: true,
+      data: booking
+    });
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({
+      success: false,
+      message: "Server error"
+    });
+  }
+};
 
 // Get all bookings (with optional filters)
 export const getAllBookings = async (req, res) => {
@@ -84,7 +150,7 @@ export const getBookingByNumber = async (req, res) => {
 
 export const createBooking = async (req, res) => {
   try {
-    const { graduate: graduateId, package: packageId, session: sessionId, addons = [], notes } = req.body;
+    const { graduate: graduateId, package: packageId, session: sessionId, addons = [], shipment: shipmentData } = req.body;
     // const graduateId = req.user.id;
 
     // 1. Fetch Package price + Addons prices
@@ -117,6 +183,18 @@ export const createBooking = async (req, res) => {
       gateway: "billplz",
       paymentStatus: "pending",
     });
+
+    let shipment = null;
+    if (shipmentData) {
+      shipment = await Shipment.create({
+        booking: booking._id,
+        receiver: shipmentData.receiver,
+      });
+
+      // Link shipment back to booking
+      booking.shipment = shipment._id;
+      await booking.save();
+    }
 
     // 3. Call Billplz API
     const billplzResponse = await axios.post(
@@ -270,7 +348,7 @@ export const billplzCallback = async (req, res) => {
       return res.status(404).json({ success: false, message: "Payment not found" });
     }
 
-    const booking = await Booking.findById(payment.booking).populate("session");
+    const booking = await Booking.findById(payment.booking).populate("session").populate("graduate", "fullName email").populate("package", "name");
     if (!booking) {
       return res.status(404).json({ success: false, message: "Booking not found" });
     }
@@ -292,11 +370,13 @@ export const billplzCallback = async (req, res) => {
     if (isPaid) {
       booking.status = "booked";
       booking.paymentStatus = "paid";
+      booking.totalPrice = payment.paidAmount;
       if (!wasAlreadyPaid) {
         session.bookedCount += 1;
         session.status = session.bookedCount >= session.capacity ? "full" : "available";
         await session.save();
       }
+      // await sendBookingConfirmation(booking);
     } else {
       booking.status = "pending";
       booking.paymentStatus = "failed";
@@ -304,6 +384,7 @@ export const billplzCallback = async (req, res) => {
 
     await booking.save();
 
+    console.log(`Booking ${booking.bookingNumber} payment status updated to ${payment.paymentStatus}`);
     res.status(200).json({ success: true, message: "Callback processed successfully" });
   } catch (error) {
     res.status(500).json({ success: false, message: "Internal server error" });

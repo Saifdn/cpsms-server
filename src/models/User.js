@@ -37,6 +37,14 @@ const baseUserSchema = new mongoose.Schema(
       token: {type: String },
       createdAt: {type: Date, default: Date.now },
       expiresAt: {type: Date }
+    },
+    easyparcel: {
+      access_token: { type: String, default: null },
+      refresh_token: { type: String, default: null },
+      expires_at: { type: Date, default: null },
+      refresh_token_expires_at: { type: Date, default: null },
+      connected: { type: Boolean, default: false },
+      connected_at: { type: Date, default: null },
     }
   },
   {
@@ -44,6 +52,19 @@ const baseUserSchema = new mongoose.Schema(
     discriminatorKey: 'role',
   }
 );
+
+// Is access token still valid (with 5-min buffer)?
+baseUserSchema.methods.isEPTokenValid = function () {
+  if (!this.easyparcel.access_token || !this.easyparcel.expires_at) return false;
+  return new Date(this.easyparcel.expires_at) - Date.now() > 5 * 60 * 1000;
+};
+ 
+// Is refresh token still valid?
+baseUserSchema.methods.isEPRefreshValid = function () {
+  if (!this.easyparcel.refresh_token || !this.easyparcel.refresh_token_expires_at)
+    return false;
+  return new Date(this.easyparcel.refresh_token_expires_at) > Date.now();
+};
 
 const User = mongoose.model("User", baseUserSchema);
 
