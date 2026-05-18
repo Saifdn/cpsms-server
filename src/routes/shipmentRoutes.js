@@ -4,6 +4,7 @@ import ensureEasyParcel from "../middleware/ensureEasyParcel.js";
 
 import {
   getPendingShipments,
+  getSubmittedShipments,
   getQuotation,
   submitOrder,
   getWalletBalance,
@@ -12,6 +13,7 @@ import {
 const router = express.Router();
 
 router.get("/pending", getPendingShipments);
+router.get("/submitted", getSubmittedShipments);
 
 // Apply global middleware
 router.use(verifyAccessToken, ensureEasyParcel);

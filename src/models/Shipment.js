@@ -1,3 +1,4 @@
+import { transpose } from "date-fns";
 import mongoose from "mongoose";
 
 const shipmentSchema = new mongoose.Schema(
@@ -10,8 +11,9 @@ const shipmentSchema = new mongoose.Schema(
 
     // EasyParcel Response Fields
     order_number: String,
+    shipment_number: String,
     awb_number: String,
-    label_url: String,
+    awb_url: String,
     tracking_url: String,
 
     serviceId: String,
@@ -33,6 +35,18 @@ const shipmentSchema = new mongoose.Schema(
       subdivision_code: { type: String }, // e.g., "MY-07"
       country_code: { type: String, default: "MY" },
     },
+
+    latest_shipment_status_code: Number,
+    latest_tracking_status: String,
+    latest_event_date: Date,
+    status_log: [
+      {
+        event_date: Date,
+        shipment_status_code: Number,
+        transpose_status: String,
+        location: String,
+      }
+    ],
 
     // Internal status
     status: {

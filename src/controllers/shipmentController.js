@@ -2,6 +2,7 @@ import axios from "axios";
 import "dotenv/config";
 
 import Booking from "../models/Booking.js";
+import Shipment from "../models/Shipment.js";
 
 const EP_API = process.env.EP_API_URL || "https://api.easyparcel.com/open_api/2026-03";
 
@@ -21,7 +22,6 @@ export const getPendingShipments = async (req, res) => {
     })
     .populate("graduate", "fullName email phone")
     .populate("package", "name price")
-    // .populate("session", "date startTime endTime")
     .sort({ createdAt: -1 });
 
     res.json({
@@ -34,6 +34,30 @@ export const getPendingShipments = async (req, res) => {
     res.status(500).json({
       success: false,
       message: "Failed to fetch pending shipments from database"
+    });
+  }
+};
+
+export const getSubmittedShipments = async (req, res) => {
+  try {
+    const pendingBookings = await Booking.find({
+      // Bookings that are paid/confirmed but shipment not yet created
+      status: { $in: ["preparing"] },
+    })
+    .populate("graduate", "fullName email phone")
+    .populate("package", "name price")
+    .sort({ createdAt: -1 });
+
+    res.json({
+      success: true,
+      data: pendingBookings,
+      count: pendingBookings.length,
+    });
+  } catch (error) {
+    console.error("Get Submitted Shipments Error:", error);
+    res.status(500).json({
+      success: false,
+      message: "Failed to fetch submitted shipments from database"
     });
   }
 };
@@ -157,82 +181,95 @@ export const getQuotation = async (req, res) => {
 
 export const submitOrder = async (req, res) => {
   try {
-    const { bookingIds, serviceId, serviceName, courierName } = req.body;
+    const { bookingIds, serviceId, serviceName, courierName, sender, packageDetails, features, collectionDate } = req.body;
 
     if (!bookingIds || !Array.isArray(bookingIds) || bookingIds.length === 0) {
-      return res.status(400).json({ success: false, message: "bookingIds array is required" });
+      return res.status(400).json({
+        success: false,
+        message: "bookingIds array is required",
+      });
     }
 
     if (!serviceId) {
-      return res.status(400).json({ success: false, message: "serviceId is required" });
+      return res.status(400).json({
+        success: false,
+        message: "serviceId is required",
+      });
     }
 
     const results = [];
-    let successCount = 0;
 
-    // Fetch bookings with all necessary data
-    const bookings = await Booking.find({ _id: { $in: bookingIds } })
+    // Fetch bookings
+    const bookings = await Booking.find({
+      _id: { $in: bookingIds },
+    })
       .populate("shipment")
       .populate("package", "name");
 
     if (bookings.length === 0) {
-      return res.status(404).json({ success: false, message: "No bookings found" });
+      return res.status(404).json({
+        success: false,
+        message: "No bookings found",
+      });
     }
 
     const shipmentPayload = [];
 
+    // Build payload only
     for (const booking of bookings) {
       try {
         if (!booking.shipment) {
-          results.push({ bookingId: booking._id, status: "failed", reason: "Shipment record not found" });
+          results.push({
+            bookingId: booking._id,
+            status: "failed",
+            reason: "Shipment record not found",
+          });
           continue;
         }
 
         const receiver = booking.shipment.receiver || {};
-        const graduate = booking.graduate || {};
 
-        // Build one shipment object per booking
         shipmentPayload.push({
           reference: booking.bookingNumber,
           service_id: serviceId,
-          collection_date: "2025-12-31", // You can make this dynamic if needed
-          // Dimensions (you can make these dynamic later)
-          weight: 0.5,
-          height: 5,
-          length: 5,
-          width: 5,
+          collection_date: collectionDate,
 
-          // Items (you can expand this if you have multiple items per booking)
+          weight: packageDetails.weight || 0.5,
+          height: packageDetails.height || 5,
+          length: packageDetails.length || 5,
+          width: packageDetails.width || 5,
+
           item: [
             {
               content: booking.package?.name || "Studio Session Package",
-              weight: 0.5,
-              height: 5,
-              length: 5,
-              width: 5,
+              weight: packageDetails.weight || 0.5,
+              height: packageDetails.height || 5,
+              length: packageDetails.length || 5,
+              width: packageDetails.width || 5,
               currency_code: "MYR",
               value: booking.totalPrice,
               quantity: 1,
-            }
+            },
           ],
 
           sender: {
-            name: "KFK Studio",
-            company: "Kelab Fotokreaetif",
-            phone_number_country_code: "MY",
-            phone_number: "1126760658",
-            email: "admin@kfk.com",
-            address_1: "123 Main St",
-            address_2: "",
-            postcode: "10150",
-            city: "Lunas",
-            subdivision_code: "MY-01",
-            country_code: "MY",
+            name: sender.name,
+            company: sender.company,
+            phone_number_country_code: sender.phone_number_country_code,
+            phone_number: sender.phone_number,
+            email: sender.email,
+            address_1: sender.address_1,
+            address_2: sender.address_2 || "",
+            postcode: sender.postcode,
+            city: sender.city,
+            subdivision_code: sender.subdivision_code,
+            country_code: sender.country_code,
           },
 
           receiver: {
             name: receiver.name,
-            phone_number_country_code: receiver.phone_number_country_code,
+            phone_number_country_code:
+              receiver.phone_number_country_code,
             phone_number: receiver.phone_number,
             email: receiver.email,
             address_1: receiver.address_1,
@@ -244,35 +281,29 @@ export const submitOrder = async (req, res) => {
           },
 
           feature: {
-            sms_tracking: false,
-            email_tracking: true,
-            whatsapp_tracking: true,
-          }
+            sms_tracking: features?.sms_tracking || false,
+            email_tracking: features?.email_tracking || true,
+            whatsapp_tracking: features?.whatsapp_tracking || true,
+          },
         });
-
-        // Update shipment record
-        await Shipment.findByIdAndUpdate(booking.shipment, {
-            serviceId,
-            serviceName: serviceName || "",
-            courierName: courierName || "",
-          status: "submitted"
-        });
-
-        results.push({ bookingId: booking._id, status: "success" });
-        successCount++;
-
       } catch (err) {
-        results.push({ bookingId: booking._id, status: "failed", reason: err.message });
+        results.push({
+          bookingId: booking._id,
+          status: "failed",
+          reason: err.message,
+        });
       }
     }
 
-    // Call EasyParcel Submit Order API
+    // Submit to EasyParcel
     let easyParcelResponse = null;
 
     if (shipmentPayload.length > 0) {
       easyParcelResponse = await axios.post(
         `${EP_API}/shipment/submit_orders`,
-        { shipment: shipmentPayload },
+        {
+          shipment: shipmentPayload,
+        },
         {
           headers: {
             Authorization: `Bearer ${req.epToken}`,
@@ -281,21 +312,99 @@ export const submitOrder = async (req, res) => {
       );
     }
 
+    // Process EasyParcel response
+    const responseData = easyParcelResponse?.data?.data || [];
+
+    for (const order of responseData) {
+      const shipments = order.shipments || [];
+
+      for (const shipment of shipments) {
+        try {
+          // Skip failed shipment
+          if (shipment.status !== "success") {
+            results.push({
+              reference: shipment.reference,
+              status: "failed",
+              reason: "EasyParcel shipment failed",
+            });
+
+            continue;
+          }
+
+          // Find booking using reference
+          const booking = bookings.find(
+            (b) => b.bookingNumber === shipment.reference
+          );
+
+          if (!booking || !booking.shipment) {
+            results.push({
+              reference: shipment.reference,
+              status: "failed",
+              reason: "Booking not found from reference",
+            });
+
+            continue;
+          }
+
+          // Update shipment
+          await Shipment.findByIdAndUpdate(booking.shipment._id, {
+
+            // order_number: shipment.order_details.order_number,
+
+            serviceId: serviceId,
+            serviceName: serviceName || "",
+            courierName: courierName || "",
+
+            shipment_number: shipment.shipment_number,
+            awb_number: shipment.awb_number,
+            awb_url: shipment.awb_url,
+            tracking_url: shipment.tracking_url,
+
+            status: "submitted",
+          });
+
+          await Booking.findByIdAndUpdate(booking._id, {
+            status: "preparing",
+          });
+
+          results.push({
+            bookingId: booking._id,
+            bookingNumber: booking.bookingNumber,
+            status: "success",
+            shipment_number: shipment.shipment_number,
+          });
+        } catch (err) {
+          results.push({
+            reference: shipment.reference,
+            status: "failed",
+            reason: err.message,
+          });
+        }
+      }
+    }
+
+    const successCount = results.filter(
+      (r) => r.status === "success"
+    ).length;
+
     res.json({
       success: true,
       message: `Successfully submitted ${successCount} orders to EasyParcel`,
       processed: bookingIds.length,
       successCount,
       easyParcelResponse: easyParcelResponse?.data,
-      results
+      results,
     });
-
   } catch (error) {
-    console.error("Submit Order Error:", error.response?.data || error.message);
+    console.error(
+      "Submit Order Error:",
+      error.response?.data || error.message
+    );
+
     res.status(500).json({
       success: false,
       message: "Failed to submit orders to EasyParcel",
-      error: error.message
+      error: error.message,
     });
   }
 };
@@ -303,7 +412,7 @@ export const submitOrder = async (req, res) => {
 export const getWalletBalance = async (req, res) => {
   try {
     const response = await axios.get(
-      `${EP_API}/account/wallet_balance`,
+      `${EP_API}/wallet`,
       {
         headers: {
           Authorization: `Bearer ${req.epToken}`,
