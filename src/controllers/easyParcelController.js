@@ -150,7 +150,7 @@ export const trackingStatusWebhook = async (req, res) => {
       status: shipment.status === "delivered" ? "delivered" : "shipped"
     });
 
-    res.json({ success: true, message: "Webhook processed successfully" });
+    res.status(200).json({ success: true, message: "Webhook processed successfully" });
 
   } catch (error) {
     console.error("Webhook Error:", error);
