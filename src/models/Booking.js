@@ -40,6 +40,12 @@ const bookingSchema = new mongoose.Schema(
       default: null,
     },
 
+    shipment: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "Shipment",
+      default: null,
+    },
+
     paymentStatus: {
       type: String,
       enum: [
@@ -51,9 +57,13 @@ const bookingSchema = new mongoose.Schema(
       default: "pending"
     },
 
+    totalPrice: {
+      type: Number,
+    },
+
     status: {
       type: String,
-      enum: ["pending", "booked", "checked-in", "in-progress", "completed", "cancelled"],
+      enum: ["pending", "booked", "checked-in", "in-progress", "completed", "preparing", "shipped", "delivered", "cancelled"],
       default: "pending",
     },
 

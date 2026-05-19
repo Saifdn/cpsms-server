@@ -3,6 +3,7 @@ import express from "express";
 import http from "http";
 import cors from "cors";
 import dotenv from "dotenv";
+import session from "express-session";
 
 import connectDB from "./config/db.js";
 import { initSocket } from "./config/socket.js";
@@ -17,6 +18,8 @@ import sessionRoutes from "./routes/sessionRoutes.js";
 import bookingRoutes from "./routes/bookingRoutes.js";
 import queueRoutes from "./routes/queueRoutes.js";
 import paymentRoutes from "./routes/paymentRoutes.js";
+import shipmentRoutes from "./routes/shipmentRoutes.js";
+import easyParcelRoutes from "./routes/easyParcelRoutes.js";
 
 import cookieParser from "cookie-parser";
 import helmet from "helmet";
@@ -29,6 +32,17 @@ app.use(helmet());
 app.use(cookieParser());
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
+
+app.use(session({
+  secret: process.env.SESSION_SECRET || 'default-secret',
+  resave: false,
+  saveUninitialized: false,
+  cookie: {
+    secure: process.env.NODE_ENV === "production",
+    httpOnly: true,
+    maxAge: 1000 * 60 * 60 * 24  // 24 hours
+  }
+}));
 
 app.use(cors({
   origin: process.env.CLIENT_URL || "http://localhost:5173",
@@ -53,6 +67,8 @@ const startServer = async () => {
     app.use("/api/bookings", bookingRoutes);
     app.use("/api/queue", queueRoutes);
     app.use("/api/payments", paymentRoutes);
+    app.use("/api/shipments", shipmentRoutes);
+    app.use("/easyparcel", easyParcelRoutes);
 
     // === CRITICAL: Create HTTP server FIRST ===
     const httpServer = http.createServer(app);

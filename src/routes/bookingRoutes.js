@@ -6,7 +6,9 @@ import {
   createBooking,
   updateBooking,
   cancelBooking,
-  billplzCallback
+  billplzCallback,
+  getMyBookings,
+  getMyBookingById,
 } from "../controllers/bookingController.js";
 import { verifyAccessToken } from "../middleware/authMiddleware.js";
 
@@ -17,12 +19,12 @@ router.post("/billplz-callback", billplzCallback);
 router.use(verifyAccessToken);
 
 router.get("/", getAllBookings);
+router.get('/my-bookings', getMyBookings);
+router.get('/my-bookings/:id', getMyBookingById);
 router.get("/number/:bookingNumber", getBookingByNumber);
 router.get("/:id", getBookingById);
 router.post("/", createBooking);
 router.put("/:id", updateBooking);
 router.put("/:id/cancel", cancelBooking);
-
-
 
 export default router;
