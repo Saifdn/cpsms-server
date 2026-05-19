@@ -3,6 +3,7 @@ import "dotenv/config";
 
 import Booking from "../models/Booking.js";
 import Shipment from "../models/Shipment.js";
+import Session from "../models/Session.js";
 
 const EP_API = process.env.EP_API_URL || "https://api.easyparcel.com/open_api/2026-03";
 
@@ -16,18 +17,50 @@ const handleError = (res, err, message) => {
 
 export const getPendingShipments = async (req, res) => {
   try {
-    const pendingBookings = await Booking.find({
-      // Bookings that are paid/confirmed but shipment not yet created
-      status: { $in: ["completed"] },
-    })
-    .populate("graduate", "fullName email phone")
-    .populate("package", "name price")
-    .sort({ createdAt: -1 });
+
+    const { date, page = 1, limit = 20 } = req.query;
+
+    const filter = { status: { $in: ["completed"] } };
+
+    if (date) {
+      const start = new Date(date);
+      start.setHours(0, 0, 0, 0);
+
+      const end = new Date(date);
+      end.setHours(23, 59, 59, 999);
+
+      const sessions = await Session.find({
+        date: {
+          $gte: start,
+          $lte: end,
+        },
+      }).select("_id");
+
+      filter.session = {
+        $in: sessions.map((s) => s._id),
+      };
+    }
+
+    const skip = (Number(page) - 1) * Number(limit);
+    const total = await Booking.countDocuments(filter);
+
+    const pendingBookings = await Booking.find(filter)
+      .populate("graduate", "fullName email phone")
+      .populate("package", "name price")
+      .sort({ createdAt: -1 })
+      .skip(skip)
+      .limit(Number(limit));
 
     res.json({
       success: true,
       data: pendingBookings,
       count: pendingBookings.length,
+      pagination: {
+        total,
+        page: Number(page),
+        limit: Number(limit),
+        totalPages: Math.ceil(total / Number(limit)),
+      },
     });
   } catch (error) {
     console.error("Get Pending Shipments Error:", error);
@@ -40,18 +73,50 @@ export const getPendingShipments = async (req, res) => {
 
 export const getSubmittedShipments = async (req, res) => {
   try {
-    const pendingBookings = await Booking.find({
-      // Bookings that are paid/confirmed but shipment not yet created
-      status: { $in: ["preparing"] },
-    })
-    .populate("graduate", "fullName email phone")
-    .populate("package", "name price")
-    .sort({ createdAt: -1 });
+
+    const { date, page = 1, limit = 20 } = req.query;
+
+    const filter = { status: { $in: ["preparing"] } };
+
+    if (date) {
+      const start = new Date(date);
+      start.setHours(0, 0, 0, 0);
+
+      const end = new Date(date);
+      end.setHours(23, 59, 59, 999);
+
+      const sessions = await Session.find({
+        date: {
+          $gte: start,
+          $lte: end,
+        },
+      }).select("_id");
+
+      filter.session = {
+        $in: sessions.map((s) => s._id),
+      };
+    }
+
+    const skip = (Number(page) - 1) * Number(limit);
+    const total = await Booking.countDocuments(filter);
+
+    const pendingBookings = await Booking.find(filter)
+      .populate("graduate", "fullName email phone")
+      .populate("package", "name price")
+      .sort({ createdAt: -1 })
+      .skip(skip)
+      .limit(Number(limit));
 
     res.json({
       success: true,
       data: pendingBookings,
       count: pendingBookings.length,
+      pagination: {
+        total,
+        page: Number(page),
+        limit: Number(limit),
+        totalPages: Math.ceil(total / Number(limit)),
+      },
     });
   } catch (error) {
     console.error("Get Submitted Shipments Error:", error);
@@ -176,8 +241,6 @@ export const getQuotation = async (req, res) => {
     return handleError(res, err, "Failed to get quotation");
   }
 };
-
-// controllers/shipmentController.js
 
 export const submitOrder = async (req, res) => {
   try {
@@ -360,7 +423,7 @@ export const submitOrder = async (req, res) => {
             awb_url: shipment.awb_url,
             tracking_url: shipment.tracking_url,
 
-            status: "submitted",
+            status: "confirmed",
           });
 
           await Booking.findByIdAndUpdate(booking._id, {

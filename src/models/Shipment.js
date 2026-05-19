@@ -36,15 +36,14 @@ const shipmentSchema = new mongoose.Schema(
       country_code: { type: String, default: "MY" },
     },
 
+    // Tracking Information
     latest_shipment_status_code: Number,
     latest_tracking_status: String,
-    latest_event_date: Date,
     status_log: [
       {
-        event_date: Date,
+        timestamp: Date,
         shipment_status_code: Number,
-        transpose_status: String,
-        location: String,
+        tracking_status: String,
       }
     ],
 
@@ -53,10 +52,13 @@ const shipmentSchema = new mongoose.Schema(
       type: String,
       enum: [
         "draft",
-        "submitted",
-        "shipped",
+        "confirmed",
+        "ready",
+        "in-transit",
+        "out_for_delivery",
         "delivered",
         "failed",
+        "returned",
       ],
       default: "draft",
     },

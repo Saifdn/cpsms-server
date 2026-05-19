@@ -3,14 +3,15 @@ import { verifyAccessToken } from "../middleware/authMiddleware.js";
 import {
   startEasyParcelOAuth,
   handleEasyParcelCallback,
+  trackingStatusWebhook,
 } from "../controllers/easyParcelController.js";
 
 const router = express.Router();
 
-// Start OAuth
 router.get("/auth/connect", startEasyParcelOAuth);
 
-// OAuth Callback
 router.get("/auth/callback", handleEasyParcelCallback);
+
+router.post("/webhook", trackingStatusWebhook);
 
 export default router;

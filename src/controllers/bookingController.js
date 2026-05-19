@@ -52,7 +52,8 @@ export const getMyBookingById = async (req, res) => {
       .populate('package', 'name services price')
       .populate('addons', 'name price')
       .populate('session', 'date startTime endTime')
-      .select('package addons session paymentStatus status bookedAt bookingNumber')
+      .populate('shipment', 'latest_shipment_status_code latest_tracking_status status_log')
+      .select('paymentStatus status bookedAt bookingNumber')
 
     if (!booking) {
       return res.status(404).json({
