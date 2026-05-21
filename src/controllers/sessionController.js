@@ -113,10 +113,28 @@ export const getAllSessions = async (req, res) => {
     let filter = {};
 
     if (date) {
-      filter.date = new Date(date);
+      // Validate date format
+      const parsedDate = new Date(date);
+      
+      if (isNaN(parsedDate.getTime())) {
+        return res.status(400).json({
+          success: false,
+          message: "Invalid date format. Use YYYY-MM-DD"
+        });
+      }
+
+      // Use start of day to end of day to avoid timezone issues
+      const startOfDay = new Date(parsedDate.setHours(0, 0, 0, 0));
+      const endOfDay = new Date(parsedDate.setHours(23, 59, 59, 999));
+
+      filter.date = {
+        $gte: startOfDay,
+        $lte: endOfDay,
+      };
     }
 
-    const sessions = await Session.find(filter).sort({ date: 1, startTime: 1 });
+    const sessions = await Session.find(filter)
+      .sort({ date: 1, startTime: 1 });
 
     res.json({
       success: true,
@@ -124,7 +142,12 @@ export const getAllSessions = async (req, res) => {
       data: sessions,
     });
   } catch (error) {
-    res.status(500).json({ success: false, message: "Server error" });
+    console.error("Get All Sessions Error:", error);
+    res.status(500).json({ 
+      success: false, 
+      message: "Server error",
+      error: process.env.NODE_ENV === 'development' ? error.message : undefined
+    });
   }
 };
 

@@ -53,7 +53,7 @@ export const getMyBookingById = async (req, res) => {
       .populate('addons', 'name price')
       .populate('session', 'date startTime endTime')
       .populate('shipment', 'latest_shipment_status_code latest_tracking_status status_log')
-      .select('paymentStatus status bookedAt bookingNumber')
+      .select('paymentStatus status bookedAt bookingNumber totalPrice')
 
     if (!booking) {
       return res.status(404).json({
@@ -78,30 +78,79 @@ export const getMyBookingById = async (req, res) => {
 // Get all bookings (with optional filters)
 export const getAllBookings = async (req, res) => {
   try {
-    const { status, graduate } = req.query;
+    const { status, graduate, date, page = 1, limit = 20 } = req.query;
+
     let filter = {};
 
+    // Existing filters
     if (status) filter.status = status;
     if (graduate) filter.graduate = graduate;
+
+    // Date filter (by session date)
+    if (date) {
+      const start = new Date(date);
+      start.setHours(0, 0, 0, 0);
+
+      const end = new Date(date);
+      end.setHours(23, 59, 59, 999);
+
+      const sessions = await Session.find({
+        date: {
+          $gte: start,
+          $lte: end,
+        },
+      }).select("_id");
+
+      if (sessions.length > 0) {
+        filter.session = { $in: sessions.map((s) => s._id) };
+      } else {
+        // No sessions on this date → return empty result
+        return res.json({
+          success: true,
+          data: [],
+          count: 0,
+          pagination: {
+            total: 0,
+            page: Number(page),
+            limit: Number(limit),
+            totalPages: 0,
+          },
+        });
+      }
+    }
+
+    const skip = (Number(page) - 1) * Number(limit);
+
+    // Get total count for pagination
+    const total = await Booking.countDocuments(filter);
 
     const bookings = await Booking.find(filter)
       .populate("graduate", "fullName email phone")
       .populate("package", "name price")
       .populate("session", "date startTime endTime")
       // .populate("studio", "name location")
-      .sort({ bookedAt: -1 });
+      .sort({ bookedAt: -1 })
+      .skip(skip)
+      .limit(Number(limit));
 
     res.json({
       success: true,
-      count: bookings.length,
       data: bookings,
+      count: bookings.length,
+      pagination: {
+        total,
+        page: Number(page),
+        limit: Number(limit),
+        totalPages: Math.ceil(total / Number(limit)),
+      },
     });
   } catch (error) {
-  res.status(500).json({
-    success: false,
-    message: error.message,
-  });
-}
+    console.error("Get All Bookings Error:", error);
+    res.status(500).json({
+      success: false,
+      message: "Failed to fetch bookings from database",
+    });
+  }
 };
 
 // Get single booking

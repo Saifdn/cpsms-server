@@ -76,7 +76,7 @@ export const getSubmittedShipments = async (req, res) => {
 
     const { date, page = 1, limit = 20 } = req.query;
 
-    const filter = { status: { $in: ["preparing"] } };
+    const filter = { status: { $in: ["preparing", "delivery"] } };
 
     if (date) {
       const start = new Date(date);

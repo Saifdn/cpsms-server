@@ -1,5 +1,7 @@
 import axios from "axios";
 import User from "../models/User.js";
+import Shipment from "../models/Shipment.js";
+import Booking from "../models/Booking.js";
 import { getShipmentStatus } from "../utils/easyparcelStatus.js";
 import "dotenv/config";
 
@@ -107,53 +109,136 @@ export const handleEasyParcelCallback = async (req, res) => {
   }
 };
 
+// export const trackingStatusWebhook = async (req, res) => {
+//   try {
+//     const payload = req.body;
+
+//     console.log("EasyParcel Webhook Received:", payload);
+
+//     if (payload.topic !== "shipment.tracking.update") {
+//       return res.status(400).json({ success: false, message: "Unsupported topic" });
+//     }
+
+//     const { shipment_number, awb_number, latest_shipment_status_code, latest_tracking_status, status_log } = payload;
+
+//     if (!shipment_number) {
+//       return res.status(400).json({ success: false, message: "shipment_number is required" });
+//     }
+
+//     // Find shipment by shipment_number
+//     const shipment = await Shipment.findOne({ shipment_number });
+
+//     if (!shipment) {
+//       return res.status(404).json({ success: false, message: "Shipment not found" });
+//     }
+
+//     // Update tracking information
+//     // shipment.awb_number = awb_number || shipment.awb_number;
+//     shipment.latest_shipment_status_code = latest_shipment_status_code;
+//     shipment.latest_tracking_status = latest_tracking_status;
+
+//     if (status_log && Array.isArray(status_log)) {
+//       shipment.status_log = status_log;
+//     }
+
+//     // Update status based on EasyParcel status code
+//     const shipmentStatus = getShipmentStatus(latest_shipment_status_code);
+//     shipment.status = shipmentStatus.status;
+
+//     await shipment.save();
+
+//     // Optional: Update Booking status too
+//     await Booking.findByIdAndUpdate(shipment.booking, {
+//       status: shipment.status === "delivered" ? "delivered" : "shipped"
+//     });
+
+//     res.status(200).json({ success: true, message: "Webhook processed successfully" });
+
+//   } catch (error) {
+//     console.error("Webhook Error:", error);
+//     res.status(500).json({ success: false, message: error.message});
+//   }
+// };
+
 export const trackingStatusWebhook = async (req, res) => {
   try {
     const payload = req.body;
 
-    console.log("EasyParcel Webhook Received:", payload);
+    console.log("EasyParcel Webhook:", JSON.stringify(payload, null, 2));
 
     if (payload.topic !== "shipment.tracking.update") {
-      return res.status(400).json({ success: false, message: "Unsupported topic" });
+      return res.status(400).json({
+        success: false,
+        message: "Unsupported topic",
+      });
     }
 
-    const { shipment_number, awb_number, latest_shipment_status_code, latest_tracking_status, status_log } = payload;
+    const {
+      shipment_number,
+      awb_number,
+      latest_shipment_status_code,
+      latest_tracking_status,
+      status_log,
+    } = payload;
 
     if (!shipment_number) {
-      return res.status(400).json({ success: false, message: "shipment_number is required" });
+      return res.status(400).json({
+        success: false,
+        message: "shipment_number is required",
+      });
     }
 
-    // Find shipment by shipment_number
     const shipment = await Shipment.findOne({ shipment_number });
 
     if (!shipment) {
-      return res.status(404).json({ success: false, message: "Shipment not found" });
+      return res.status(404).json({
+        success: false,
+        message: "Shipment not found",
+      });
     }
 
-    // Update tracking information
+    // Normalize status_log
+    let normalizedStatusLog = [];
+
+    if (status_log) {
+      if (Array.isArray(status_log)) {
+        normalizedStatusLog = status_log;
+      } else if (typeof status_log === "object") {
+        normalizedStatusLog = Object.values(status_log);
+      }
+    }
+
     // shipment.awb_number = awb_number || shipment.awb_number;
     shipment.latest_shipment_status_code = latest_shipment_status_code;
     shipment.latest_tracking_status = latest_tracking_status;
+    shipment.status_log = normalizedStatusLog;
 
-    if (status_log && Array.isArray(status_log)) {
-      shipment.status_log = status_log;
-    }
+    const shipmentStatus = getShipmentStatus(
+      latest_shipment_status_code
+    );
 
-    // Update status based on EasyParcel status code
-    const shipmentStatus = getShipmentStatus(latest_shipment_status_code);
     shipment.status = shipmentStatus.status;
 
     await shipment.save();
 
-    // Optional: Update Booking status too
     await Booking.findByIdAndUpdate(shipment.booking, {
-      status: shipment.status === "delivered" ? "delivered" : "shipped"
+      status:
+        shipment.status === "delivered"
+          ? "delivered"
+          : "shipped",
     });
 
-    res.status(200).json({ success: true, message: "Webhook processed successfully" });
+    return res.status(200).json({
+      success: true,
+      message: "Webhook processed successfully",
+    });
 
   } catch (error) {
     console.error("Webhook Error:", error);
-    res.status(500).json({ success: false, message: "Webhook processing failed" });
+
+    return res.status(500).json({
+      success: false,
+      message: error.message,
+    });
   }
 };

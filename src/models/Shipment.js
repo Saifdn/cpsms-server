@@ -54,7 +54,7 @@ const shipmentSchema = new mongoose.Schema(
         "draft",
         "confirmed",
         "ready",
-        "in-transit",
+        "in_transit",
         "out_for_delivery",
         "delivered",
         "failed",
