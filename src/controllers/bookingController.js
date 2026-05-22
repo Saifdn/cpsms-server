@@ -53,7 +53,7 @@ export const getMyBookingById = async (req, res) => {
       .populate('addons', 'name price')
       .populate('session', 'date startTime endTime')
       .populate('shipment', 'latest_shipment_status_code latest_tracking_status status_log')
-      .select('paymentStatus status bookedAt bookingNumber')
+      .select('paymentStatus status bookedAt bookingNumber totalPrice')
 
     if (!booking) {
       return res.status(404).json({
@@ -78,30 +78,94 @@ export const getMyBookingById = async (req, res) => {
 // Get all bookings (with optional filters)
 export const getAllBookings = async (req, res) => {
   try {
-    const { status, graduate } = req.query;
+    const { status, graduate, date, search, page = 1, limit = 20 } = req.query;
+
     let filter = {};
 
     if (status) filter.status = status;
     if (graduate) filter.graduate = graduate;
+
+    if (search) {
+      const matchingGraduates = await Graduate.find({
+        $or: [
+          { fullName: { $regex: search, $options: "i" } },
+          { email: { $regex: search, $options: "i" } },
+        ],
+      }).select("_id");
+
+      const graduateIds = matchingGraduates.map((g) => g._id);
+
+      filter.$or = [
+        { bookingNumber: { $regex: search, $options: "i" } },
+        { graduate: { $in: graduateIds } },
+      ];
+    }
+
+    // Date filter (by session date)
+    if (date) {
+      const start = new Date(date);
+      start.setHours(0, 0, 0, 0);
+
+      const end = new Date(date);
+      end.setHours(23, 59, 59, 999);
+
+      const sessions = await Session.find({
+        date: {
+          $gte: start,
+          $lte: end,
+        },
+      }).select("_id");
+
+      if (sessions.length > 0) {
+        filter.session = { $in: sessions.map((s) => s._id) };
+      } else {
+        // No sessions on this date → return empty result
+        return res.json({
+          success: true,
+          data: [],
+          count: 0,
+          pagination: {
+            total: 0,
+            page: Number(page),
+            limit: Number(limit),
+            totalPages: 0,
+          },
+        });
+      }
+    }
+
+    const skip = (Number(page) - 1) * Number(limit);
+
+    // Get total count for pagination
+    const total = await Booking.countDocuments(filter);
 
     const bookings = await Booking.find(filter)
       .populate("graduate", "fullName email phone")
       .populate("package", "name price")
       .populate("session", "date startTime endTime")
       // .populate("studio", "name location")
-      .sort({ bookedAt: -1 });
+      .sort({ bookedAt: -1 })
+      .skip(skip)
+      .limit(Number(limit));
 
     res.json({
       success: true,
-      count: bookings.length,
       data: bookings,
+      count: bookings.length,
+      pagination: {
+        total,
+        page: Number(page),
+        limit: Number(limit),
+        totalPages: Math.ceil(total / Number(limit)),
+      },
     });
   } catch (error) {
-  res.status(500).json({
-    success: false,
-    message: error.message,
-  });
-}
+    console.error("Get All Bookings Error:", error);
+    res.status(500).json({
+      success: false,
+      message: "Failed to fetch bookings from database",
+    });
+  }
 };
 
 // Get single booking
@@ -131,7 +195,9 @@ export const getBookingByNumber = async (req, res) => {
     const booking = await Booking.findOne({ bookingNumber })
       .populate("graduate", "fullName email phone")
       .populate("package", "name price")
-      .populate("session", "date startTime endTime");
+      .populate("addons", "name price")
+      .populate("session", "date startTime endTime")
+      .select("bookingNumber status totalPrice bookedAt");
 
     if (!booking) {
       return res.status(404).json({ 
@@ -236,49 +302,6 @@ export const createBooking = async (req, res) => {
   }
 };
 
-// Create new booking (usually done by system when graduate books)
-// export const createBooking = async (req, res) => {
-//   const sessionId = req.body.session;
-
-//   try {
-//     // 1. Find session
-//     const session = await Session.findById(sessionId);
-
-//     if (!session) {
-//       return res.status(404).json({
-//         success: false,
-//         message: "Session not found",
-//       });
-//     }
-
-//     // 2. Check capacity
-//     if (session.bookedCount >= session.capacity) {
-//       return res.status(400).json({
-//         success: false,
-//         message: "Session is fully booked",
-//       });
-//     }
-
-//     // 3. Create booking
-//     const booking = await Booking.create(req.body);
-
-//     // 4. Increment bookedCount
-//     session.bookedCount += 1;
-//     await session.save();
-
-//     res.status(201).json({
-//       success: true,
-//       message: "Booking created successfully",
-//       data: booking,
-//     });
-//   } catch (error) {
-//     res.status(400).json({
-//       success: false,
-//       message: error.message,
-//     });
-//   }
-// };
-
 // Update booking status (e.g., check-in, complete)
 export const updateBooking = async (req, res) => {
   try {
@@ -318,6 +341,90 @@ export const cancelBooking = async (req, res) => {
     res.json({ success: true, message: "Booking cancelled successfully" });
   } catch (error) {
     res.status(500).json({ success: false, message: "Server error" });
+  }
+};
+
+export const adminCreateBooking = async (req, res) => {
+  try {
+    const {
+      graduate: graduateId,
+      package: packageId,
+      session: sessionId,
+      addons = [],
+      paymentMethod,
+      shipment: shipmentData,
+    } = req.body;
+
+    if (!["cash", "qr"].includes(paymentMethod)) {
+      return res.status(400).json({ success: false, message: "paymentMethod must be 'cash' or 'qr'" });
+    }
+
+    const packageData = await Package.findById(packageId);
+    if (!packageData) {
+      return res.status(404).json({ success: false, message: "Package not found" });
+    }
+
+    let totalAmount = packageData.price;
+    if (addons.length > 0) {
+      const addonData = await Addon.find({ _id: { $in: addons } });
+      totalAmount += addonData.reduce((sum, addon) => sum + addon.price, 0);
+    }
+
+    const session = await Session.findById(sessionId);
+    if (!session) {
+      return res.status(404).json({ success: false, message: "Session not found" });
+    }
+    if (session.bookedCount >= session.capacity) {
+      return res.status(400).json({ success: false, message: "Session is fully booked" });
+    }
+
+    const booking = await Booking.create({
+      graduate: graduateId,
+      package: packageId,
+      session: sessionId,
+      addons,
+      status: "booked",
+      paymentStatus: "paid",
+      totalPrice: totalAmount,
+    });
+
+    await Payment.create({
+      booking: booking._id,
+      amount: totalAmount,
+      paidAmount: totalAmount,
+      gateway: paymentMethod,
+      paymentStatus: "paid",
+    });
+
+    if (shipmentData) {
+      const shipment = await Shipment.create({
+        booking: booking._id,
+        receiver: shipmentData.receiver,
+      });
+      booking.shipment = shipment._id;
+      await booking.save();
+    }
+
+    session.bookedCount += 1;
+    session.status = session.bookedCount >= session.capacity ? "full" : "available";
+    await session.save();
+
+    await booking.populate([
+      { path: "graduate", select: "fullName email" },
+      { path: "package", select: "name" },
+      { path: "session", select: "date startTime endTime" },
+    ]);
+
+    await sendBookingConfirmation(booking);
+
+    res.status(201).json({
+      success: true,
+      message: "Booking created and payment recorded successfully",
+      data: booking,
+    });
+  } catch (error) {
+    console.error("Admin Create Booking Error:", error);
+    res.status(500).json({ success: false, message: "Failed to create booking" });
   }
 };
 
@@ -377,7 +484,7 @@ export const billplzCallback = async (req, res) => {
         session.status = session.bookedCount >= session.capacity ? "full" : "available";
         await session.save();
       }
-      // await sendBookingConfirmation(booking);
+      await sendBookingConfirmation(booking);
     } else {
       booking.status = "pending";
       booking.paymentStatus = "failed";

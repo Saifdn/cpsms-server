@@ -7,29 +7,44 @@ import { sendEmail } from "../utils/sendEmail.js";
 
 const userProjection = "-refreshToken -password -passwordResetToken -__v";
 
-// ==================== GRADUATES CRUD ====================
-
-// Get all graduates - Simple version (no params)
 export const getAllGraduates = async (req, res) => {
   try {
-    const graduates = await Graduate.find()
+    const { search, page = 1, limit = 20 } = req.query;
+
+    const filter = search
+      ? { $or: [{ fullName: { $regex: search, $options: "i" } }, { email: { $regex: search, $options: "i" } }] }
+      : {};
+
+    const skip = (Number(page) - 1) * Number(limit);
+
+    const total = await Graduate.countDocuments(filter);
+
+    const graduates = await Graduate.find(filter)
       .select(userProjection)
-      .sort({ createdAt: -1 });
+      .sort({ createdAt: -1 })
+      .skip(skip)
+      .limit(Number(limit));
 
     res.json({
       success: true,
-      data: graduates,    
-      count: graduates.length
+      data: graduates,
+      count: graduates.length,
+      pagination: {
+        total,
+        page: Number(page),
+        limit: Number(limit),
+        totalPages: Math.ceil(total / Number(limit)),
+      },
     });
   } catch (error) {
-    console.error(error);
+    console.error("Get All Graduates Error:", error);
     res.status(500).json({ 
       success: false, 
       message: "Failed to fetch graduates" 
     });
   }
 };
-// Get single graduate
+
 export const getGraduateById = async (req, res) => {
   try {
     const graduate = await Graduate.findById(req.params.id)
@@ -163,17 +178,35 @@ export const deleteGraduate = async (req, res) => {
 // Get all staff
 export const getAllStaff = async (req, res) => {
   try {
-    const staff = await Staff.find()
+    const { search, page = 1, limit = 20 } = req.query;
+
+    const filter = search
+      ? { $or: [{ fullName: { $regex: search, $options: "i" } }, { email: { $regex: search, $options: "i" } }, { department: { $regex: search, $options: "i" } }] }
+      : {};
+
+    const skip = (Number(page) - 1) * Number(limit);
+
+    const total = await Staff.countDocuments(filter);
+
+    const staff = await Staff.find(filter)
       .select(userProjection)
-      .sort({ createdAt: -1 });
+      .sort({ createdAt: -1 })
+      .skip(skip)
+      .limit(Number(limit));
 
     res.json({
       success: true,
       data: staff,
-      count: staff.length
+      count: staff.length,
+      pagination: {
+        total,
+        page: Number(page),
+        limit: Number(limit),
+        totalPages: Math.ceil(total / Number(limit)),
+      },
     });
   } catch (error) {
-    console.error(error);
+    console.error("Get All Staff Error:", error);
     res.status(500).json({ 
       success: false, 
       message: "Failed to fetch staff" 
@@ -317,17 +350,35 @@ export const deleteStaff = async (req, res) => {
 // Get all admins
 export const getAllAdmins = async (req, res) => {
   try {
-    const admins = await Admin.find()
+    const { search, page = 1, limit = 20 } = req.query;
+
+    const filter = search
+      ? { $or: [{ fullName: { $regex: search, $options: "i" } }, { email: { $regex: search, $options: "i" } }] }
+      : {};
+
+    const skip = (Number(page) - 1) * Number(limit);
+
+    const total = await Admin.countDocuments(filter);
+
+    const admins = await Admin.find(filter)
       .select(userProjection)
-      .sort({ createdAt: -1 });
+      .sort({ createdAt: -1 })
+      .skip(skip)
+      .limit(Number(limit));
 
     res.json({
       success: true,
       data: admins,
-      count: admins.length
+      count: admins.length,
+      pagination: {
+        total,
+        page: Number(page),
+        limit: Number(limit),
+        totalPages: Math.ceil(total / Number(limit)),
+      },
     });
   } catch (error) {
-    console.error(error);
+    console.error("Get All Admins Error:", error);
     res.status(500).json({ 
       success: false, 
       message: "Failed to fetch admins" 

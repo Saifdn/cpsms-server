@@ -47,6 +47,11 @@ const queueSchema = new mongoose.Schema(
       type: String,
       maxlength: 200,
     },
+
+    skippedCount: {
+      type: Number,
+      default: 0,
+    },
   },
   {
     timestamps: true,
@@ -85,13 +90,13 @@ queueSchema.statics.getActiveQueue = async function () {
       path: "booking",
       populate: [
         { path: "graduate", select: "fullName email phone" },
-        { path: "package", select: "name price" },
+        { path: "package", select: "name description services" },
       ],
     });
 };
 
 queueSchema.statics.getNextWaiting = function () {
-  return this.findOne({ status: "waiting" }).sort({ queueNumber: 1 });
+  return this.findOne({ status: "waiting" }).sort({ skippedCount: 1, queueNumber: 1 });
 };
 
 const Queue = mongoose.model("Queue", queueSchema);
