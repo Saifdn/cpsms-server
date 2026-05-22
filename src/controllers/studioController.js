@@ -3,7 +3,8 @@ import Studio from "../models/Studio.js";
 // Get all studios
 export const getAllStudios = async (req, res) => {
   try {
-    const studios = await Studio.find().sort({ createdAt: -1 });
+    const studios = await Studio.find().sort({ name: 1 })
+      .select("name location description isAvailable isOccupied");
 
     res.json({
       success: true,

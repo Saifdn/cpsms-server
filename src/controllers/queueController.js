@@ -80,7 +80,6 @@ export const callNext = async (req, res) => {
 };
 
 // ====================== CONFIRM ARRIVAL (Customer scans QR at studio) ======================
-// controllers/queueController.js
 export const confirmArrival = async (req, res) => {
   try {
     const { queueId } = req.body;
@@ -93,7 +92,8 @@ export const confirmArrival = async (req, res) => {
     }
 
     // Find the queue entry and populate studio info if needed
-    const queueEntry = await Queue.findById(queueId);
+    const queueEntry = await Queue.findById(queueId)
+      .populate("booking", "");
 
     if (!queueEntry) {
       return res.status(404).json({ 
@@ -202,6 +202,46 @@ export const checkOut = async (req, res) => {
       success: false, 
       message: "Failed to check-out" 
     });
+  }
+};
+
+// ====================== SKIP CUSTOMER (Staff re-queues a no-show) ======================
+export const skipCustomer = async (req, res) => {
+  try {
+    const { bookingId } = req.body;
+
+    if (!bookingId) {
+      return res.status(400).json({ success: false, message: "bookingId is required" });
+    }
+
+    const queueEntry = await Queue.findOne({ booking: bookingId });
+
+    if (!queueEntry) {
+      return res.status(404).json({ success: false, message: "Queue entry not found" });
+    }
+
+    if (queueEntry.status !== "called") {
+      return res.status(400).json({
+        success: false,
+        message: "Only a customer in 'called' status can be skipped",
+      });
+    }
+
+    queueEntry.status = "waiting";
+    queueEntry.studio = null;
+    queueEntry.skippedCount += 1;
+    await queueEntry.save();
+
+    await broadcastQueueUpdate();
+
+    res.json({
+      success: true,
+      message: "Customer skipped and moved to end of queue",
+      data: queueEntry,
+    });
+  } catch (error) {
+    console.error("Skip Customer Error:", error);
+    res.status(500).json({ success: false, message: "Failed to skip customer" });
   }
 };
 

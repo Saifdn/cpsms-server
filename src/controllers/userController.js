@@ -9,13 +9,17 @@ const userProjection = "-refreshToken -password -passwordResetToken -__v";
 
 export const getAllGraduates = async (req, res) => {
   try {
-    const { page = 1, limit = 20 } = req.query;
+    const { search, page = 1, limit = 20 } = req.query;
+
+    const filter = search
+      ? { $or: [{ fullName: { $regex: search, $options: "i" } }, { email: { $regex: search, $options: "i" } }] }
+      : {};
 
     const skip = (Number(page) - 1) * Number(limit);
 
-    const total = await Graduate.countDocuments();
+    const total = await Graduate.countDocuments(filter);
 
-    const graduates = await Graduate.find()
+    const graduates = await Graduate.find(filter)
       .select(userProjection)
       .sort({ createdAt: -1 })
       .skip(skip)
@@ -174,13 +178,17 @@ export const deleteGraduate = async (req, res) => {
 // Get all staff
 export const getAllStaff = async (req, res) => {
   try {
-    const { page = 1, limit = 20 } = req.query;
+    const { search, page = 1, limit = 20 } = req.query;
+
+    const filter = search
+      ? { $or: [{ fullName: { $regex: search, $options: "i" } }, { email: { $regex: search, $options: "i" } }, { department: { $regex: search, $options: "i" } }] }
+      : {};
 
     const skip = (Number(page) - 1) * Number(limit);
 
-    const total = await Staff.countDocuments();
+    const total = await Staff.countDocuments(filter);
 
-    const staff = await Staff.find()
+    const staff = await Staff.find(filter)
       .select(userProjection)
       .sort({ createdAt: -1 })
       .skip(skip)
@@ -342,13 +350,17 @@ export const deleteStaff = async (req, res) => {
 // Get all admins
 export const getAllAdmins = async (req, res) => {
   try {
-    const { page = 1, limit = 20 } = req.query;
+    const { search, page = 1, limit = 20 } = req.query;
+
+    const filter = search
+      ? { $or: [{ fullName: { $regex: search, $options: "i" } }, { email: { $regex: search, $options: "i" } }] }
+      : {};
 
     const skip = (Number(page) - 1) * Number(limit);
 
-    const total = await Admin.countDocuments();
+    const total = await Admin.countDocuments(filter);
 
-    const admins = await Admin.find()
+    const admins = await Admin.find(filter)
       .select(userProjection)
       .sort({ createdAt: -1 })
       .skip(skip)

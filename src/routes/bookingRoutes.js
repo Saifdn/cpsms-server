@@ -4,13 +4,14 @@ import {
   getBookingById,
   getBookingByNumber,
   createBooking,
+  adminCreateBooking,
   updateBooking,
   cancelBooking,
   billplzCallback,
   getMyBookings,
   getMyBookingById,
 } from "../controllers/bookingController.js";
-import { verifyAccessToken } from "../middleware/authMiddleware.js";
+import { verifyAccessToken, authorizeRoles } from "../middleware/authMiddleware.js";
 
 const router = express.Router();
 
@@ -23,6 +24,7 @@ router.get('/my-bookings', getMyBookings);
 router.get('/my-bookings/:id', getMyBookingById);
 router.get("/number/:bookingNumber", getBookingByNumber);
 router.get("/:id", getBookingById);
+router.post("/admin", authorizeRoles("superadmin", "admin", "staff"), adminCreateBooking);
 router.post("/", createBooking);
 router.put("/:id", updateBooking);
 router.put("/:id/cancel", cancelBooking);
