@@ -1,5 +1,5 @@
 import QRCode from "qrcode";
-import { getMailTransporter } from "./mailTransport.js";
+import { getResendClient } from "./mailTransport.js";
 
 export const sendBookingConfirmation = async (booking) => {
   try {
@@ -10,7 +10,7 @@ export const sendBookingConfirmation = async (booking) => {
       color: { dark: "#8B3020", light: "#FFFFFF" },
     });
 
-    const transporter = getMailTransporter();
+    const resend = getResendClient();
 
     // ── Helpers ────────────────────────────────────────────────────────────
     const formatDate = (d) =>
@@ -368,8 +368,8 @@ export const sendBookingConfirmation = async (booking) => {
       .png()
       .toBuffer();
 
-    await transporter.sendMail({
-      from: `"Kelab Fotokreatif" <${process.env.EMAIL_USER}>`,
+    await resend.emails.send({
+      from: `Kelab Fotokreatif <${process.env.EMAIL_FROM}>`,
       to: booking.graduate?.email,
       subject: `Booking Confirmed — #${booking.bookingNumber} - Kelab Fotokreatif`,
       html: htmlContent,
@@ -377,13 +377,13 @@ export const sendBookingConfirmation = async (booking) => {
         {
           filename: `qr-${booking.bookingNumber}.png`,
           content: qrBuffer,
-          cid: "qrCode",
+          content_id: "qrCode",
         },
         {
           filename: "logo.png",
           content: logoBuffer,
-          contentType: "image/png",
-          cid: "logoMark",
+          content_type: "image/png",
+          content_id: "logoMark",
         },
       ],
     });
@@ -400,6 +400,6 @@ export const sendBookingConfirmation = async (booking) => {
       address: error?.address,
       port: error?.port,
     });
-    throw error;
+    return false;
   }
 };
