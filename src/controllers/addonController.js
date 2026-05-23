@@ -2,7 +2,8 @@ import Addon from "../models/Addon.js";
 
 export const getAllAddons = async (req, res) => {
   try {
-    const addons = await Addon.find().sort({ price: 1 });
+    const addons = await Addon.find().sort({ price: 1 })
+      .select("-__v -createdAt -updatedAt");
     res.json({ success: true, count: addons.length, data: addons });
   } catch (error) {
     res.status(500).json({ success: false, message: "Server error" });

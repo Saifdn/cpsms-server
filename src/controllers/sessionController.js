@@ -37,7 +37,6 @@ const generateTimeSlots = (startTimeStr, endTimeStr, duration, breakStartStr, br
   return slots;
 };
 
-// ====================== GENERATE SESSIONS ======================
 export const generateSessions = async (req, res) => {
   try {
     const {
@@ -106,7 +105,6 @@ export const generateSessions = async (req, res) => {
   }
 };
 
-// ====================== GET SESSIONS ======================
 export const getAllSessions = async (req, res) => {
   try {
     const { date } = req.query;
@@ -134,6 +132,7 @@ export const getAllSessions = async (req, res) => {
     }
 
     const sessions = await Session.find(filter)
+      .select("-__v -createdAt -updatedAt")
       .sort({ date: 1, startTime: 1 });
 
     res.json({
@@ -151,7 +150,6 @@ export const getAllSessions = async (req, res) => {
   }
 };
 
-// ====================== UPDATE SESSION ======================
 export const updateSession = async (req, res) => {
   try {
     const session = await Session.findByIdAndUpdate(
@@ -174,7 +172,6 @@ export const updateSession = async (req, res) => {
   }
 };
 
-// ====================== DELETE SESSION ======================
 export const deleteSession = async (req, res) => {
   try {
     const session = await Session.findByIdAndDelete(req.params.id);
