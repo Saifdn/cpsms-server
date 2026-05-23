@@ -1,10 +1,10 @@
-import { getMailTransporter } from "./mailTransport.js";
+import { getResendClient } from "./mailTransport.js";
 
 export const sendEmail = async (to, subject, text) => {
-  const transporter = getMailTransporter();
+  const resend = getResendClient();
 
-  await transporter.sendMail({
-    from: process.env.EMAIL_USER,
+  await resend.emails.send({
+    from: `Kelab Fotokreatif <${process.env.EMAIL_FROM}>`,
     to,
     subject,
     text,
