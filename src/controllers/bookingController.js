@@ -220,6 +220,14 @@ export const createBooking = async (req, res) => {
     const { graduate: graduateId, package: packageId, session: sessionId, addons = [], shipment: shipmentData } = req.body;
     // const graduateId = req.user.id;
 
+    const session = await Session.findById(sessionId);
+    if (!session) {
+      return res.status(404).json({ success: false, message: "Session not found" });
+    }
+    if (session.bookedCount >= session.capacity) {
+      return res.status(400).json({ success: false, message: "Session is fully booked" });
+    }
+
     // 1. Fetch Package price + Addons prices
     const packageData = await Package.findById(packageId);
     if (!packageData) {
@@ -336,6 +344,15 @@ export const cancelBooking = async (req, res) => {
 
     if (!booking) {
       return res.status(404).json({ success: false, message: "Booking not found" });
+    }
+
+    if (booking.paymentStatus === "paid") {
+      const session = await Session.findById(booking.session);
+      if (session && session.bookedCount > 0) {
+        session.bookedCount -= 1;
+        session.status = session.bookedCount >= session.capacity ? "full" : "available";
+        await session.save();
+      }
     }
 
     res.json({ success: true, message: "Booking cancelled successfully" });
@@ -458,7 +475,6 @@ export const billplzCallback = async (req, res) => {
     }
 
     const booking = await Booking.findById(payment.booking)
-      .populate("session", "date startTime endTime")
       .populate("graduate", "fullName email phone")
       .populate("package", "name price services")
       .populate("addons", "name price");
@@ -466,7 +482,7 @@ export const billplzCallback = async (req, res) => {
       return res.status(404).json({ success: false, message: "Booking not found" });
     }
 
-    const { session } = booking;
+    const session = await Session.findById(booking.session);
     if (!session) {
       return res.status(404).json({ success: false, message: "Session not found" });
     }

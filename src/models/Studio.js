@@ -23,7 +23,6 @@ const studioSchema = new mongoose.Schema(
       type: Boolean,
       default: false,
     },
-    // to be remove!!!!
     currentBooking: {
       type: mongoose.Schema.Types.ObjectId,
       ref: "Booking",
@@ -31,11 +30,10 @@ const studioSchema = new mongoose.Schema(
     },
   },
   {
-    timestamps: true,        // Adds createdAt & updatedAt
+    timestamps: true,
   }
 );
 
-// Index for faster queries
 studioSchema.index({ isAvailable: 1, isOccupied: 1 });
 studioSchema.index({ name: 1 });
 

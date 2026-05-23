@@ -1,3 +1,4 @@
+import User from "../models/User.js";
 import Graduate from "../models/Graduate.js";
 import Staff from "../models/Staff.js";
 import Admin from "../models/Admin.js";
@@ -6,6 +7,31 @@ import crypto from "crypto";
 import { sendWelcomeEmail } from "../utils/sendWelcomeEmail.js";
 
 const userProjection = "-refreshToken -password -passwordResetToken -__v";
+
+export const getMe = async (req, res) => {
+  try {
+    const user = await User.findById(req.user.userId).select("fullName email phone role");
+    if (!user) return res.status(404).json({ success: false, message: "User not found" });
+    res.json({ success: true, data: user });
+  } catch (error) {
+    res.status(500).json({ success: false, message: "Server error" });
+  }
+};
+
+export const updateMe = async (req, res) => {
+  try {
+    const { fullName, phone } = req.body;
+    const user = await User.findByIdAndUpdate(
+      req.user.userId,
+      { fullName, phone },
+      { new: true, runValidators: true }
+    ).select("fullName email phone role");
+    if (!user) return res.status(404).json({ success: false, message: "User not found" });
+    res.json({ success: true, data: user });
+  } catch (error) {
+    res.status(500).json({ success: false, message: "Server error" });
+  }
+};
 
 export const getAllGraduates = async (req, res) => {
   try {

@@ -1,5 +1,7 @@
 import express from "express";
 import {
+  getMe,
+  updateMe,
   getAllGraduates,
   getGraduateById,
   createGraduate,
@@ -16,8 +18,12 @@ import {
   updateAdmin,
   deleteAdmin,
 } from "../controllers/userController.js";
+import { verifyAccessToken } from "../middleware/authMiddleware.js";
 
 const router = express.Router();
+
+router.get("/me", verifyAccessToken, getMe);         // GET authenticated user's own profile
+router.patch("/me", verifyAccessToken, updateMe);    // UPDATE authenticated user's own profile
 
 router.get("/graduates", getAllGraduates);           // GET all graduates
 router.get("/graduates/:id", getGraduateById);       // GET one graduate
