@@ -3,7 +3,8 @@ import Package from "../models/Package.js";
 // Get all packages
 export const getAllPackages = async (req, res) => {
   try {
-    const packages = await Package.find().sort({ price: 1 });
+    const packages = await Package.find().sort({ price: 1 })
+      .select("-__v -createdAt -updatedAt");
     
     res.json({
       success: true,

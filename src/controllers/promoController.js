@@ -2,7 +2,8 @@ import PromoAd from "../models/PromoAd.js";
 
 export const getAllPromoAds = async (req, res) => {
   try {
-    const promos = await PromoAd.find().sort({ createdAt: -1 });
+    const promos = await PromoAd.find().sort({ createdAt: -1 })
+      .select("name description imageBase64");
     res.json({ success: true, count: promos.length, data: promos });
   } catch (error) {
     res.status(500).json({ success: false, message: "Server error" });
