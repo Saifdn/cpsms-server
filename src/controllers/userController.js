@@ -3,7 +3,7 @@ import Staff from "../models/Staff.js";
 import Admin from "../models/Admin.js";
 import bcrypt from "bcrypt";
 import crypto from "crypto";
-import { sendEmail } from "../utils/sendEmail.js";
+import { sendWelcomeEmail } from "../utils/sendWelcomeEmail.js";
 
 const userProjection = "-refreshToken -password -passwordResetToken -__v";
 
@@ -85,24 +85,7 @@ export const createGraduate = async (req, res) => {
       role: 'graduate',
     });
 
-    // Send email with the plain password
-    await sendEmail(
-      email,
-      "Your Graduate Account Created",
-      `
-        Hello ${fullName},
-
-        Your account has been created successfully.
-
-        Email: ${email}
-        Password: ${randomPassword}
-
-        Please login and change your password immediately for security.
-
-        Best regards,
-        KFK Studio Team
-      `
-    );
+    await sendWelcomeEmail({ fullName, email, password: randomPassword, role: 'graduate', phone });
 
     res.status(201).json({
       success: true,
@@ -256,24 +239,7 @@ export const createStaff = async (req, res) => {
       role: 'staff',                    // Important: Set role as 'staff'
     });
 
-    // Send email with the plain password
-    await sendEmail(
-      email,
-      "Your Staff Account Created",
-      `
-        Hello ${fullName},
-
-        Your staff account has been created successfully.
-
-        Email: ${email}
-        Password: ${randomPassword}
-
-        Please login and change your password immediately for security.
-
-        Best regards,
-        KFK Studio Team
-      `
-    );
+    await sendWelcomeEmail({ fullName, email, password: randomPassword, role: 'staff', phone, department });
 
     res.status(201).json({
       success: true,
@@ -436,25 +402,7 @@ export const createAdmin = async (req, res) => {
       role: role,                    // 'admin' or 'superadmin'
     });
 
-    // Send email with the plain password
-    await sendEmail(
-      email,
-      "Your Admin Account Created",
-      `
-        Hello ${fullName},
-
-        Your admin account has been created successfully.
-
-        Email: ${email}
-        Password: ${randomPassword}
-        Role: ${role}
-
-        Please login and change your password immediately for security.
-
-        Best regards,
-        KFK Studio Team
-      `
-    );
+    await sendWelcomeEmail({ fullName, email, password: randomPassword, role, phone });
 
     res.status(201).json({
       success: true,

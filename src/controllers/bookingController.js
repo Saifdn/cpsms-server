@@ -410,9 +410,10 @@ export const adminCreateBooking = async (req, res) => {
     await session.save();
 
     await booking.populate([
-      { path: "graduate", select: "fullName email" },
-      { path: "package", select: "name" },
+      { path: "graduate", select: "fullName email phone" },
+      { path: "package", select: "name price services" },
       { path: "session", select: "date startTime endTime" },
+      { path: "addons", select: "name price" },
     ]);
 
     await sendBookingConfirmation(booking);
@@ -456,7 +457,11 @@ export const billplzCallback = async (req, res) => {
       return res.status(404).json({ success: false, message: "Payment not found" });
     }
 
-    const booking = await Booking.findById(payment.booking).populate("session").populate("graduate", "fullName email").populate("package", "name");
+    const booking = await Booking.findById(payment.booking)
+      .populate("session", "date startTime endTime")
+      .populate("graduate", "fullName email phone")
+      .populate("package", "name price services")
+      .populate("addons", "name price");
     if (!booking) {
       return res.status(404).json({ success: false, message: "Booking not found" });
     }

@@ -7,7 +7,7 @@ import {
   generateAccessToken,
   generateRefreshToken,
 } from "../utils/generateTokens.js"
-import { sendEmail } from "../utils/sendEmail.js"
+import { sendResetPasswordEmail } from "../utils/sendResetPasswordEmail.js"
 
 const cookieOptions = {
   httpOnly: true,
@@ -161,11 +161,7 @@ export const forgotPassword = async (req, res) => {
 
   const resetUrl = `${process.env.CLIENT_URL}/reset-password/${resetToken}`;
 
-  await sendEmail(
-    user.email,
-    "Password Reset",
-    `Reset your password using this link: ${resetUrl}`
-  );
+  await sendResetPasswordEmail({ email: user.email, fullName: user.fullName, resetUrl });
 
   res.json({ message: "Reset link sent" });
 };
