@@ -16,6 +16,13 @@ export const sendResetPasswordEmail = async ({ email, fullName, resetUrl }) => {
     };
     const F = `-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif`;
 
+    // ── Logo: SVG → PNG → base64 ──────────────────────────────────────────
+    const { default: sharp } = await import("sharp");
+    const logoBase64 = (await sharp(Buffer.from(LOGO_SVG))
+      .resize(480, 136, { fit: "contain", background: { r: 139, g: 48, b: 32, alpha: 0 } })
+      .png()
+      .toBuffer()).toString("base64");
+
     const html = `
 <!DOCTYPE html>
 <html lang="en">
@@ -45,7 +52,7 @@ export const sendResetPasswordEmail = async ({ email, fullName, resetUrl }) => {
         <tr>
           <td align="center" style="padding:36px 48px 32px;
                                     border-bottom:1px solid ${C.border};">
-            <img src="cid:logoMark" alt="Kelab Fotokreatif Studio"
+            <img src="data:image/png;base64,${logoBase64}" alt="Kelab Fotokreatif Studio"
                  width="240" height="68"
                  style="display:block;margin:0 auto;" />
           </td>
@@ -168,12 +175,6 @@ export const sendResetPasswordEmail = async ({ email, fullName, resetUrl }) => {
 </body>
 </html>`;
 
-    const { default: sharp } = await import("sharp");
-    const logoBuffer = await sharp(Buffer.from(LOGO_SVG))
-      .resize(480, 136, { fit: "contain", background: { r: 139, g: 48, b: 32, alpha: 0 } })
-      .png()
-      .toBuffer();
-
     const resend = getResendClient();
 
     await resend.emails.send({
@@ -181,14 +182,6 @@ export const sendResetPasswordEmail = async ({ email, fullName, resetUrl }) => {
       to: email,
       subject: "Reset Your Password — Kelab Fotokreatif",
       html,
-      attachments: [
-        {
-          filename: "logo.png",
-          content: logoBuffer,
-          content_type: "image/png",
-          content_id: "logoMark",
-        },
-      ],
     });
 
     console.log(`✅ Password reset email sent to ${email}`);
