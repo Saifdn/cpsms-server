@@ -1,5 +1,5 @@
-import nodemailer from "nodemailer";
 import QRCode from "qrcode";
+import { getMailTransporter } from "./mailTransport.js";
 
 export const sendBookingConfirmation = async (booking) => {
   try {
@@ -10,14 +10,7 @@ export const sendBookingConfirmation = async (booking) => {
       color: { dark: "#8B3020", light: "#FFFFFF" },
     });
 
-    const transporter = nodemailer.createTransport({
-      service: "gmail",
-      family: 4,
-      auth: {
-        user: process.env.EMAIL_USER,
-        pass: process.env.EMAIL_PASS,
-      },
-    });
+    const transporter = getMailTransporter();
 
     // ── Helpers ────────────────────────────────────────────────────────────
     const formatDate = (d) =>
@@ -398,7 +391,15 @@ export const sendBookingConfirmation = async (booking) => {
     console.log(`✅ Booking confirmation sent to ${booking.graduate?.email}`);
     return true;
   } catch (error) {
-    console.error("❌ Error sending booking email:", error);
+    console.error("❌ Error sending booking email:", {
+      message: error?.message,
+      code: error?.code,
+      command: error?.command,
+      syscall: error?.syscall,
+      errno: error?.errno,
+      address: error?.address,
+      port: error?.port,
+    });
     throw error;
   }
 };

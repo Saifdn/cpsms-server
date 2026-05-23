@@ -433,7 +433,9 @@ export const adminCreateBooking = async (req, res) => {
       { path: "addons", select: "name price" },
     ]);
 
-    await sendBookingConfirmation(booking);
+    sendBookingConfirmation(booking).catch((err) => {
+      console.error("Email failed but booking already updated:", err);
+    });
 
     res.status(201).json({
       success: true,
@@ -505,7 +507,9 @@ export const billplzCallback = async (req, res) => {
         session.status = session.bookedCount >= session.capacity ? "full" : "available";
         await session.save();
       }
-      await sendBookingConfirmation(booking);
+      sendBookingConfirmation(booking).catch((err) => {
+        console.error("Email failed but booking already updated:", err);
+      });
     } else {
       booking.status = "pending";
       booking.paymentStatus = "failed";
