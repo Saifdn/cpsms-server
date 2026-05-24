@@ -8,6 +8,7 @@ import {
   generateRefreshToken,
 } from "../utils/generateTokens.js"
 import { sendResetPasswordEmail } from "../utils/sendResetPasswordEmail.js"
+import { parsePhoneNumber } from "libphonenumber-js";
 
 
 const getCookieOptions = () => ({
@@ -19,12 +20,22 @@ const getCookieOptions = () => ({
 
 export const register = async (req, res) => {
   const { fullName, email, phone, password } = req.body
+
+  const parsedPhone = parsePhoneNumber(phone);
+
+  if (!parsedPhone?.isValid()) {
+    return res.status(400).json({
+      message: "Invalid phone number",
+    });
+  }
+
   const hashedPassword = await bcrypt.hash(password, 10)
 
   const user = await Graduate.create({
     fullName,
     email,
-    phone,
+    countryCode: parsedPhone.country,
+    phone: parsedPhone.number,
     password: hashedPassword,
     role: 'graduate',
   })
