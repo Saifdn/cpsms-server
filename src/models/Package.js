@@ -22,6 +22,10 @@ const packageSchema = new mongoose.Schema(
       required: true,
       default: [],
     },
+    isPopular: {
+      type: Boolean,
+      default: false,
+    }
   },
   {
     timestamps: true,
