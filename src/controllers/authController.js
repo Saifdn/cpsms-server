@@ -9,16 +9,13 @@ import {
 } from "../utils/generateTokens.js"
 import { sendResetPasswordEmail } from "../utils/sendResetPasswordEmail.js"
 
-const cookieOptions = {
-  httpOnly: true,
-  secure: false, // true in production
-  sameSite: "lax",
-}
 
-if (process.env.NODE_ENV === "production") {
-  cookieOptions.secure = true,
-  cookieOptions.sameSite = "none"
-}
+const getCookieOptions = () => ({
+  httpOnly: true,
+  secure: process.env.NODE_ENV === "production",
+  sameSite: process.env.NODE_ENV === "production" ? "none" : "lax",
+  path: "/",
+});
 
 export const register = async (req, res) => {
   const { fullName, email, phone, password } = req.body
@@ -54,45 +51,16 @@ export const login = async (req, res) => {
   }
   await user.save()
 
-  res.cookie("refreshToken", refreshToken, cookieOptions)
+  res.cookie("refreshToken", refreshToken, getCookieOptions())
   res.json({ accessToken })
 }
 
-// export const refresh = async (req, res) => {
-//   const token = req.cookies.refreshToken
-//   if (!token) return res.sendStatus(401)
-
-//   let decoded
-//   try {
-//     decoded = jwt.verify(token, process.env.JWT_REFRESH_SECRET)
-//   } catch (err) {
-//     return res.sendStatus(403)
-//   }
-
-//   const user = await User.findById(decoded.userId)
-//   if (!user || !user.refreshToken?.token) return res.sendStatus(403)
-
-//   const valid = await bcrypt.compare(token, user.refreshToken.token)
-//   if (!valid) return res.sendStatus(403)
-
-//   // Generate new tokens
-//   const newAccessToken = generateAccessToken(user)
-//   const newRefreshToken = generateRefreshToken(user)
-
-//   user.refreshToken = {
-//     token: await bcrypt.hash(newRefreshToken, 10),
-//     createdAt: new Date(),
-//     expiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000)
-//   }
-//   await user.save()
-
-//   res.cookie("refreshToken", newRefreshToken, cookieOptions)
-//   res.json({ accessToken: newAccessToken })
-// }
-
 export const refresh = async (req, res) => {
   const token = req.cookies.refreshToken
-  if (!token) return res.sendStatus(401)
+  console.log("refresh cookies:", req.cookies)
+  if (!token) {
+    return res.status(401).json({ message: "No refresh token cookie" });
+  }
 
   let decoded
   try {
@@ -107,7 +75,6 @@ export const refresh = async (req, res) => {
   const valid = await bcrypt.compare(token, user.refreshToken.token)
   if (!valid) return res.sendStatus(403)
 
-  // ✅ ONLY generate new access token
   const newAccessToken = generateAccessToken(user)
 
   res.json({ accessToken: newAccessToken })
@@ -130,7 +97,7 @@ export const logout = async (req, res) => {
     await user.save()
   }
 
-  res.clearCookie("refreshToken")
+  res.clearCookie("refreshToken", getCookieOptions())
   res.sendStatus(204)
 }
 
