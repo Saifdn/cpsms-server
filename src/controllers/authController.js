@@ -57,7 +57,6 @@ export const login = async (req, res) => {
 
 export const refresh = async (req, res) => {
   const token = req.cookies.refreshToken
-  console.log("refresh cookies:", req.cookies)
   if (!token) {
     return res.status(401).json({ message: "No refresh token cookie" });
   }
@@ -66,14 +65,14 @@ export const refresh = async (req, res) => {
   try {
     decoded = jwt.verify(token, process.env.JWT_REFRESH_SECRET)
   } catch (err) {
-    return res.sendStatus(403)
+    return res.status(403).json({ message: "Invalid refresh token" });
   }
 
   const user = await User.findById(decoded.userId)
-  if (!user || !user.refreshToken?.token) return res.sendStatus(403)
+  if (!user || !user.refreshToken?.token) return res.status(403).json({ message: "Invalid refresh token" })
 
   const valid = await bcrypt.compare(token, user.refreshToken.token)
-  if (!valid) return res.sendStatus(403)
+  if (!valid) return res.status(403).json({ message: "Invalid refresh token" })
 
   const newAccessToken = generateAccessToken(user)
 
@@ -82,13 +81,13 @@ export const refresh = async (req, res) => {
 
 export const logout = async (req, res) => {
   const token = req.cookies.refreshToken
-  if (!token) return res.sendStatus(204)
+  if (!token) return res.status(204).json({ message: "No refresh token to invalidate" })
 
   let decoded
   try {
     decoded = jwt.verify(token, process.env.JWT_REFRESH_SECRET)
   } catch (err) {
-    return res.sendStatus(204)
+    return res.status(204).json({ message: "No refresh token to invalidate" })
   }
 
   const user = await User.findById(decoded.userId)
@@ -98,7 +97,7 @@ export const logout = async (req, res) => {
   }
 
   res.clearCookie("refreshToken", getCookieOptions())
-  res.sendStatus(204)
+  res.status(204).json({ message: "Logged out successfully" })
 }
 
 export const forgotPassword = async (req, res) => {
