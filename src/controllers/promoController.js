@@ -45,6 +45,33 @@ export const createPromoAd = async (req, res) => {
   }
 };
 
+export const updatePromoAd = async (req, res) => {
+  try {
+    const { name, description } = req.body;
+    const updates = {};
+
+    if (name !== undefined) updates.name = name;
+    if (description !== undefined) updates.description = description;
+
+    if (req.file) {
+      updates.imageBase64 = `data:${req.file.mimetype};base64,${req.file.buffer.toString("base64")}`;
+    }
+
+    const promo = await PromoAd.findByIdAndUpdate(req.params.id, updates, {
+      new: true,
+      runValidators: true,
+    });
+
+    if (!promo) {
+      return res.status(404).json({ success: false, message: "Promo Ad not found" });
+    }
+
+    res.json({ success: true, message: "Promo Ad updated successfully", data: promo });
+  } catch (error) {
+    res.status(400).json({ success: false, message: error.message });
+  }
+};
+
 export const deletePromoAd = async (req, res) => {
   try {
     const promo = await PromoAd.findByIdAndUpdate(req.params.id, { isActive: false }, { new: true });

@@ -6,6 +6,7 @@ const router = express.Router();
 
 router.get("/", promoController.getAllPromoAds);
 router.post("/", upload.single("image"), promoController.createPromoAd);
+router.put("/:id", upload.single("image"), promoController.updatePromoAd);
 router.delete("/:id", promoController.deletePromoAd);
 
 export default router;
