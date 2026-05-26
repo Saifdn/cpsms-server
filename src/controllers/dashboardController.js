@@ -4,6 +4,7 @@ import Shipment from "../models/Shipment.js";
 import Payment from "../models/Payment.js";
 import Queue from "../models/Queue.js";
 import User from "../models/User.js";
+import Task from "../models/Task.js";
 
 export const getDashboardOverview = async (req, res) => {
   try {
@@ -31,6 +32,7 @@ export const getDashboardOverview = async (req, res) => {
       shipmentStatusAgg,
       graduateCount,
       staffCount,
+      myTasks,
     ] = await Promise.all([
       // 1. Expected customers today — bookings whose session falls today and are confirmed
       Booking.aggregate([
@@ -137,6 +139,11 @@ export const getDashboardOverview = async (req, res) => {
 
       // 15. Total staff
       User.countDocuments({ role: "staff" }),
+
+      // 16. Tasks assigned to this user (staff only)
+      req.user.role === "staff"
+        ? Task.find({ assignedTo: req.user._id }).sort({ createdAt: -1 }).select("title description category").lean()
+        : Promise.resolve([]),
     ]);
 
     // Normalise booking status breakdown into an object
@@ -179,6 +186,7 @@ export const getDashboardOverview = async (req, res) => {
           graduates: graduateCount,
           staff: staffCount,
         },
+        myTasks,
       },
     });
   } catch (error) {
