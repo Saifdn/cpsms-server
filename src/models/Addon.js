@@ -17,6 +17,10 @@ const addonSchema = new mongoose.Schema(
       required: true,
       min: 0,
     },
+    normalPrice: {
+      type: Number,
+      min: 0,
+    }
   },
   {
     timestamps: true,

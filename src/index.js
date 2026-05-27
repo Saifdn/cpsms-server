@@ -21,6 +21,7 @@ import paymentRoutes from "./routes/paymentRoutes.js";
 import shipmentRoutes from "./routes/shipmentRoutes.js";
 import easyParcelRoutes from "./routes/easyParcelRoutes.js";
 import dashboardRoutes from "./routes/dashboardRoutes.js";
+import taskRoutes from "./routes/taskRoutes.js";
 
 import cookieParser from "cookie-parser";
 import helmet from "helmet";
@@ -70,6 +71,7 @@ const startServer = async () => {
     app.use("/api/payments", paymentRoutes);
     app.use("/api/shipments", shipmentRoutes);
     app.use("/api/dashboard", dashboardRoutes);
+    app.use("/api/tasks", taskRoutes);
     app.use("/easyparcel", easyParcelRoutes);
 
     // === CRITICAL: Create HTTP server FIRST ===
