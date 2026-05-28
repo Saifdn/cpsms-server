@@ -7,15 +7,20 @@ import {
   updateStudio,
   deleteStudio,
 } from "../controllers/studioController.js";
+import { verifyAccessToken, authorizeRoles } from "../middleware/authMiddleware.js";
 
 const router = express.Router();
 
-// Studio Routes
-router.get("/", getAllStudios);
-router.get("/:id", getStudioById);
-router.post("/", createStudio);
-router.put("/:id/availability", toggleStudioAvailability);
-router.put("/:id", updateStudio);
-router.delete("/:id", deleteStudio);
+// Any authenticated user can view studios
+router.get("/",    verifyAccessToken, getAllStudios);
+router.get("/:id", verifyAccessToken, getStudioById);
+
+// Staff+ can toggle availability (needed during live sessions)
+router.put("/:id/availability", verifyAccessToken, authorizeRoles("staff", "admin", "superadmin"), toggleStudioAvailability);
+
+// Admin+ can create/update; superadmin can delete
+router.post("/",    verifyAccessToken, authorizeRoles("staff", "admin", "superadmin"), createStudio);
+router.put("/:id",  verifyAccessToken, authorizeRoles("staff", "admin", "superadmin"), updateStudio);
+router.delete("/:id", verifyAccessToken, authorizeRoles("staff", "admin", "superadmin"),        deleteStudio);
 
 export default router;
