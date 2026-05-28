@@ -1,7 +1,6 @@
 import express from "express";
-import { verifyAccessToken } from "../middleware/authMiddleware.js";
+import { verifyAccessToken, authorizeRoles } from "../middleware/authMiddleware.js";
 import ensureEasyParcel from "../middleware/ensureEasyParcel.js";
-
 import {
   getPendingShipments,
   getSubmittedShipments,
@@ -12,15 +11,16 @@ import {
 
 const router = express.Router();
 
-router.get("/pending", getPendingShipments);
+// All shipment routes are staff+ only — apply auth globally
+router.use(verifyAccessToken, authorizeRoles("staff", "admin", "superadmin"));
+
+// DB-only queries (no EasyParcel token needed)
+router.get("/pending",   getPendingShipments);
 router.get("/submitted", getSubmittedShipments);
 
-// Apply global middleware
-router.use(verifyAccessToken, ensureEasyParcel);
-
-// Shipment APIs
-router.post("/quotation", getQuotation);
-router.post("/submit", submitOrder);
-router.get("/wallet", getWalletBalance);
+// EasyParcel API routes (token auto-refreshed by ensureEasyParcel)
+router.post("/quotation", ensureEasyParcel, getQuotation);
+router.post("/submit",    ensureEasyParcel, submitOrder);
+router.get("/wallet",     ensureEasyParcel, getWalletBalance);
 
 export default router;
