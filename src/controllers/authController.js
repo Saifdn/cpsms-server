@@ -1,15 +1,4 @@
-import User from "../models/User.js"
-import Graduate from "../models/Graduate.js"
-import bcrypt from "bcrypt"
-import jwt from "jsonwebtoken"
-import crypto from "crypto";
-import {
-  generateAccessToken,
-  generateRefreshToken,
-} from "../utils/generateTokens.js"
-import { sendResetPasswordEmail } from "../utils/sendResetPasswordEmail.js"
-import { parsePhoneNumber } from "libphonenumber-js";
-
+import * as authService from "../services/authService.js";
 
 const getCookieOptions = () => ({
   httpOnly: true,
@@ -18,155 +7,58 @@ const getCookieOptions = () => ({
   path: "/",
 });
 
-export const register = async (req, res) => {
-  const { fullName, email, phone, password } = req.body
-
-  const parsedPhone = parsePhoneNumber(phone);
-
-  if (!parsedPhone?.isValid()) {
-    return res.status(400).json({
-      message: "Invalid phone number",
-    });
-  }
-
-  const hashedPassword = await bcrypt.hash(password, 10)
-
-  const user = await Graduate.create({
-    fullName,
-    email,
-    countryCode: parsedPhone.country,
-    phone: parsedPhone.number,
-    password: hashedPassword,
-    role: 'graduate',
-  })
-
-  res.status(201).json({ message: "User created" })
-}
-
-export const login = async (req, res) => {
-  const { email, password } = req.body
-  const user = await User.findOne({ email })
-  if (!user) return res.status(401).json({ message: "Invalid credentials" })
-
-  const valid = await bcrypt.compare(password, user.password)
-  if (!valid) return res.status(401).json({ message: "Invalid credentials" })
-
-  const accessToken = generateAccessToken(user)
-  const refreshToken = generateRefreshToken(user)
-
-  // Store single refresh token
-  user.refreshToken = {
-    token: await bcrypt.hash(refreshToken, 10),
-    createdAt: new Date(),
-    expiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000) // optional: 7 days expiry
-  }
-  await user.save()
-
-  res.cookie("refreshToken", refreshToken, getCookieOptions())
-  res.json({ accessToken })
-}
-
-export const refresh = async (req, res) => {
-  const token = req.cookies.refreshToken
-  if (!token) {
-    return res.status(401).json({ message: "No refresh token cookie" });
-  }
-
-  let decoded
+export const register = async (req, res, next) => {
   try {
-    decoded = jwt.verify(token, process.env.JWT_REFRESH_SECRET)
+    const data = await authService.registerUser(req.body);
+    res.status(201).json({ success: true, message: "Account created successfully", data });
   } catch (err) {
-    return res.status(403).json({ message: "Invalid refresh token" });
+    next(err);
   }
-
-  const user = await User.findById(decoded.userId)
-  if (!user || !user.refreshToken?.token) return res.status(403).json({ message: "Invalid refresh token" })
-
-  const valid = await bcrypt.compare(token, user.refreshToken.token)
-  if (!valid) return res.status(403).json({ message: "Invalid refresh token" })
-
-  const newAccessToken = generateAccessToken(user)
-
-  res.json({ accessToken: newAccessToken })
-}
-
-export const logout = async (req, res) => {
-  const token = req.cookies.refreshToken
-  if (!token) return res.status(204).json({ message: "No refresh token to invalidate" })
-
-  let decoded
-  try {
-    decoded = jwt.verify(token, process.env.JWT_REFRESH_SECRET)
-  } catch (err) {
-    return res.status(204).json({ message: "No refresh token to invalidate" })
-  }
-
-  const user = await User.findById(decoded.userId)
-  if (user) {
-    user.refreshToken = null
-    await user.save()
-  }
-
-  res.clearCookie("refreshToken", getCookieOptions())
-  res.status(204).json({ message: "Logged out successfully" })
-}
-
-export const forgotPassword = async (req, res) => {
-  const { email } = req.body;
-
-  const user = await User.findOne({ email });
-
-  if (!user) {
-    return res.json({
-      message: "If this email exists, a reset link has been sent",
-    });
-  }
-
-  const resetToken = crypto.randomBytes(32).toString("hex");
-
-  const hashedToken = crypto
-    .createHash("sha256")
-    .update(resetToken)
-    .digest("hex");
-
-  user.passwordResetToken = {
-    token: hashedToken,
-    expiresAt: Date.now() + 10 * 60 * 1000,   // 10 minutes
-  };
-
-  await user.save();
-
-  const resetUrl = `${process.env.CLIENT_URL}/reset-password/${resetToken}`;
-
-  await sendResetPasswordEmail({ email: user.email, fullName: user.fullName, resetUrl });
-
-  res.json({ message: "Reset link sent" });
 };
 
-export const resetPassword = async (req, res) => {
-  const { token } = req.params;
-  const { password } = req.body;
-
-  const hashedToken = crypto
-    .createHash("sha256")
-    .update(token)
-    .digest("hex");
-
-  const user = await User.findOne({
-    "passwordResetToken.token": hashedToken,
-    "passwordResetToken.expiresAt": { $gt: Date.now() },
-  });
-
-  if (!user) {
-    return res.status(400).json({ message: "Token invalid or expired" });
+export const login = async (req, res, next) => {
+  try {
+    const { accessToken, refreshToken } = await authService.loginUser(req.body.email, req.body.password);
+    res.cookie("refreshToken", refreshToken, getCookieOptions());
+    res.json({ success: true, accessToken });
+  } catch (err) {
+    next(err);
   }
+};
 
-  const hashedPassword = await bcrypt.hash(password, 10)
+export const refresh = async (req, res, next) => {
+  try {
+    const accessToken = await authService.refreshAccessToken(req.cookies.refreshToken);
+    res.json({ success: true, accessToken });
+  } catch (err) {
+    next(err);
+  }
+};
 
-  user.password = hashedPassword;
-  user.passwordResetToken = undefined;
+export const logout = async (req, res, next) => {
+  try {
+    await authService.logoutUser(req.cookies.refreshToken);
+    res.clearCookie("refreshToken", getCookieOptions());
+    res.json({ success: true, message: "Logged out successfully" });
+  } catch (err) {
+    next(err);
+  }
+};
 
-  await user.save();
+export const forgotPassword = async (req, res, next) => {
+  try {
+    const message = await authService.forgotPassword(req.body.email);
+    res.json({ success: true, message });
+  } catch (err) {
+    next(err);
+  }
+};
 
-  res.json({ message: "Password reset successful" });
+export const resetPassword = async (req, res, next) => {
+  try {
+    await authService.resetPassword(req.params.token, req.body.password);
+    res.json({ success: true, message: "Password reset successful" });
+  } catch (err) {
+    next(err);
+  }
 };
