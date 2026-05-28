@@ -100,17 +100,19 @@ export const getSubmittedShipments = async (req, res) => {
     const skip = (Number(page) - 1) * Number(limit);
     const total = await Booking.countDocuments(filter);
 
-    const pendingBookings = await Booking.find(filter)
+    const submittedBookings = await Booking.find(filter)
       .populate("graduate", "fullName email phone")
-      .populate("package", "name price")
+      .populate("package", "name")
+      .populate("shipment", "receiver status awb_number awb_url courierName tracking_url")
+      .select("addons status bookingNumber totalPrice")
       .sort({ createdAt: -1 })
       .skip(skip)
       .limit(Number(limit));
 
     res.json({
       success: true,
-      data: pendingBookings,
-      count: pendingBookings.length,
+      data: submittedBookings,
+      count: submittedBookings.length,
       pagination: {
         total,
         page: Number(page),

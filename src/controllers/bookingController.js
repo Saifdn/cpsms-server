@@ -6,8 +6,10 @@ import Graduate from "../models/Graduate.js";
 import Package from "../models/Package.js";
 import Addon from "../models/Addon.js";
 import Shipment from "../models/Shipment.js";
+import Queue from "../models/Queue.js";
 
 import { sendBookingConfirmation } from "../utils/sendBookingEmail.js";
+import { broadcastQueueUpdate } from "../config/socket.js";
 
 import crypto from "crypto";
 
@@ -143,6 +145,7 @@ export const getAllBookings = async (req, res) => {
       .populate("graduate", "fullName email phone")
       .populate("package", "name price")
       .populate("session", "date startTime endTime")
+      .populate("addons", "name price")
       // .populate("studio", "name location")
       .sort({ bookedAt: -1 })
       .skip(skip)
@@ -336,15 +339,26 @@ export const updateBooking = async (req, res) => {
 // Cancel booking
 export const cancelBooking = async (req, res) => {
   try {
-    const booking = await Booking.findByIdAndUpdate(
-      req.params.id,
-      { status: "cancelled" },
-      { new: true }
-    );
+    const booking = await Booking.findById(req.params.id);
 
     if (!booking) {
       return res.status(404).json({ success: false, message: "Booking not found" });
     }
+
+    if (booking.status === "cancelled") {
+      return res.status(400).json({ success: false, message: "Booking is already cancelled" });
+    }
+
+    const nonCancellableStatuses = ["completed", "preparing", "delivery"];
+    if (nonCancellableStatuses.includes(booking.status)) {
+      return res.status(400).json({
+        success: false,
+        message: `Cannot cancel a booking with status "${booking.status}"`,
+      });
+    }
+
+    booking.status = "cancelled";
+    await booking.save();
 
     if (booking.paymentStatus === "paid") {
       const session = await Session.findById(booking.session);
@@ -352,6 +366,15 @@ export const cancelBooking = async (req, res) => {
         session.bookedCount -= 1;
         session.status = session.bookedCount >= session.capacity ? "full" : "available";
         await session.save();
+      }
+    }
+
+    if (booking.queue) {
+      const queue = await Queue.findById(booking.queue);
+      if (queue && !["completed", "cancelled"].includes(queue.status)) {
+        queue.status = "cancelled";
+        await queue.save();
+        broadcastQueueUpdate();
       }
     }
 
