@@ -1,53 +1,37 @@
-import Addon from "../models/Addon.js";
+import * as addonService from "../services/addonService.js";
 
-export const getAllAddons = async (req, res) => {
+export const getAllAddons = async (req, res, next) => {
   try {
-    const addons = await Addon.find().sort({ price: 1 })
-      .select("-__v -createdAt -updatedAt");
-    res.json({ success: true, count: addons.length, data: addons });
-  } catch (error) {
-    res.status(500).json({ success: false, message: "Server error" });
+    const data = await addonService.listAddons();
+    res.json({ success: true, count: data.length, data });
+  } catch (err) {
+    next(err);
   }
 };
 
-export const createAddon = async (req, res) => {
+export const createAddon = async (req, res, next) => {
   try {
-    const addon = await Addon.create(req.body);
-    res.status(201).json({ success: true, message: "Add-on created successfully", data: addon });
-  } catch (error) {
-    res.status(400).json({ success: false, message: error.message });
+    const data = await addonService.createAddon(req.body);
+    res.status(201).json({ success: true, message: "Add-on created successfully", data });
+  } catch (err) {
+    next(err);
   }
 };
 
-export const updateAddon = async (req, res) => {
+export const updateAddon = async (req, res, next) => {
   try {
-    const addon = await Addon.findByIdAndUpdate(req.params.id, req.body, { returnDocument: "after", runValidators: true });
-    if (!addon) return res.status(404).json({ success: false, message: "Add-on not found" });
-    res.json({ success: true, message: "Add-on updated successfully", data: addon });
-  } catch (error) {
-    res.status(400).json({ success: false, message: error.message });
+    const data = await addonService.updateAddon(req.params.id, req.body);
+    res.json({ success: true, message: "Add-on updated successfully", data });
+  } catch (err) {
+    next(err);
   }
 };
 
-export const deleteAddon = async (req, res) => {
+export const deleteAddon = async (req, res, next) => {
   try {
-    const addon = await Addon.findByIdAndDelete(req.params.id);
-
-    if (!addon) {
-      return res.status(404).json({ 
-        success: false, 
-        message: "Add-on not found" 
-      });
-    }
-
-    res.json({ 
-      success: true, 
-      message: "Add-on deleted permanently" 
-    });
-  } catch (error) {
-    res.status(500).json({ 
-      success: false, 
-      message: "Server error" 
-    });
+    await addonService.deleteAddon(req.params.id);
+    res.json({ success: true, message: "Add-on deleted permanently" });
+  } catch (err) {
+    next(err);
   }
 };
