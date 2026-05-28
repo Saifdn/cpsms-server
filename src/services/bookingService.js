@@ -11,6 +11,8 @@ import Queue from "../models/Queue.js";
 import { sendBookingConfirmation } from "../utils/sendBookingEmail.js";
 import { broadcastQueueUpdate } from "../config/socket.js";
 
+const BILLPLZ_API_URL = process.env.BILLPLZ_API_URL || "https://www.billplz-sandbox.com/api/v3/bills";
+
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
 function notFound(message = "Booking not found") {
@@ -200,7 +202,7 @@ export async function createBooking({ graduate: graduateId, package: packageId, 
   }
 
   const billplzResponse = await axios.post(
-    "https://www.billplz-sandbox.com/api/v3/bills",
+    "${BILLPLZ_API_URL}/bills",
     {
       collection_id: process.env.BILLPLZ_COLLECTION_ID,
       email: user.email,
