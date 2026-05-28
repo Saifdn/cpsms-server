@@ -1,83 +1,37 @@
-import PromoAd from "../models/PromoAd.js";
+import * as promoService from "../services/promoService.js";
 
-export const getAllPromoAds = async (req, res) => {
+export const getAllPromoAds = async (req, res, next) => {
   try {
-    const promos = await PromoAd.find().sort({ createdAt: -1 })
-      .select("name description imageBase64");
-    res.json({ success: true, count: promos.length, data: promos });
-  } catch (error) {
-    res.status(500).json({ success: false, message: "Server error" });
+    const data = await promoService.listPromoAds();
+    res.json({ success: true, count: data.length, data });
+  } catch (err) {
+    next(err);
   }
 };
 
-export const createPromoAd = async (req, res) => {
+export const createPromoAd = async (req, res, next) => {
   try {
-    const { name, description } = req.body;
-
-    // check image
-    if (!req.file) {
-      return res.status(400).json({
-        success: false,
-        message: "Image is required",
-      });
-    }
-
-    // convert buffer → base64
-    const imageBase64 =
-  `data:${req.file.mimetype};base64,${req.file.buffer.toString("base64")}`;
-
-    const promo = await PromoAd.create({
-      name,
-      description,
-      imageBase64,
-    });
-
-    res.status(201).json({
-      success: true,
-      message: "Promo Ad created successfully",
-      data: promo,
-    });
-  } catch (error) {
-    res.status(400).json({
-      success: false,
-      message: error.message,
-    });
+    const data = await promoService.createPromoAd(req.body, req.file);
+    res.status(201).json({ success: true, message: "Promo Ad created successfully", data });
+  } catch (err) {
+    next(err);
   }
 };
 
-export const updatePromoAd = async (req, res) => {
+export const updatePromoAd = async (req, res, next) => {
   try {
-    const { name, description } = req.body;
-    const updates = {};
-
-    if (name !== undefined) updates.name = name;
-    if (description !== undefined) updates.description = description;
-
-    if (req.file) {
-      updates.imageBase64 = `data:${req.file.mimetype};base64,${req.file.buffer.toString("base64")}`;
-    }
-
-    const promo = await PromoAd.findByIdAndUpdate(req.params.id, updates, {
-      new: true,
-      runValidators: true,
-    });
-
-    if (!promo) {
-      return res.status(404).json({ success: false, message: "Promo Ad not found" });
-    }
-
-    res.json({ success: true, message: "Promo Ad updated successfully", data: promo });
-  } catch (error) {
-    res.status(400).json({ success: false, message: error.message });
+    const data = await promoService.updatePromoAd(req.params.id, req.body, req.file);
+    res.json({ success: true, message: "Promo Ad updated successfully", data });
+  } catch (err) {
+    next(err);
   }
 };
 
-export const deletePromoAd = async (req, res) => {
+export const deletePromoAd = async (req, res, next) => {
   try {
-    const promo = await PromoAd.findByIdAndUpdate(req.params.id, { isActive: false }, { new: true });
-    if (!promo) return res.status(404).json({ success: false, message: "Promo Ad not found" });
-    res.json({ success: true, message: "Promo Ad deactivated successfully" });
-  } catch (error) {
-    res.status(500).json({ success: false, message: "Server error" });
+    await promoService.deletePromoAd(req.params.id);
+    res.json({ success: true, message: "Promo Ad deleted successfully" });
+  } catch (err) {
+    next(err);
   }
 };
