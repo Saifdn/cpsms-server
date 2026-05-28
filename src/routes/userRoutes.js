@@ -18,29 +18,33 @@ import {
   updateAdmin,
   deleteAdmin,
 } from "../controllers/userController.js";
-import { verifyAccessToken } from "../middleware/authMiddleware.js";
+import { verifyAccessToken, authorizeRoles } from "../middleware/authMiddleware.js";
 
 const router = express.Router();
 
-router.get("/me", verifyAccessToken, getMe);         // GET authenticated user's own profile
-router.patch("/me", verifyAccessToken, updateMe);    // UPDATE authenticated user's own profile
+// ─── Current User (any authenticated role) ───────────────────────────────────
+router.get("/me",   verifyAccessToken, getMe);
+router.patch("/me", verifyAccessToken, updateMe);
 
-router.get("/graduates", getAllGraduates);           // GET all graduates
-router.get("/graduates/:id", getGraduateById);       // GET one graduate
-router.post("/graduates", createGraduate);           // CREATE graduate
-router.put("/graduates/:id", updateGraduate);        // UPDATE graduate
-router.delete("/graduates/:id", deleteGraduate);     // DELETE graduate
+// ─── Graduates (staff+ can view, admin+ can mutate, superadmin can delete) ───
+router.get("/graduates",        verifyAccessToken, authorizeRoles("staff", "admin", "superadmin"), getAllGraduates);
+router.get("/graduates/:id",    verifyAccessToken, authorizeRoles("staff", "admin", "superadmin"), getGraduateById);
+router.post("/graduates",       verifyAccessToken, authorizeRoles("admin", "superadmin"),          createGraduate);
+router.put("/graduates/:id",    verifyAccessToken, authorizeRoles("admin", "superadmin"),          updateGraduate);
+router.delete("/graduates/:id", verifyAccessToken, authorizeRoles("superadmin"),                   deleteGraduate);
 
-router.get("/staff", getAllStaff);           // GET all staff
-router.get("/staff/:id", getStaffById);       // GET one staff
-router.post("/staff", createStaff);           // CREATE staff
-router.put("/staff/:id", updateStaff);        // UPDATE staff
-router.delete("/staff/:id", deleteStaff);     // DELETE staff
+// ─── Staff (admin+ can view & mutate, superadmin can delete) ─────────────────
+router.get("/staff",        verifyAccessToken, authorizeRoles("admin", "superadmin"), getAllStaff);
+router.get("/staff/:id",    verifyAccessToken, authorizeRoles("admin", "superadmin"), getStaffById);
+router.post("/staff",       verifyAccessToken, authorizeRoles("admin", "superadmin"), createStaff);
+router.put("/staff/:id",    verifyAccessToken, authorizeRoles("admin", "superadmin"), updateStaff);
+router.delete("/staff/:id", verifyAccessToken, authorizeRoles("superadmin"),          deleteStaff);
 
-router.get("/admins", getAllAdmins);           // GET all admins
-router.get("/admins/:id", getAdminById);       // GET one admin
-router.post("/admins", createAdmin);           // CREATE admin
-router.put("/admins/:id", updateAdmin);        // UPDATE admin
-router.delete("/admins/:id", deleteAdmin);     // DELETE admin
+// ─── Admins (superadmin only) ─────────────────────────────────────────────────
+router.get("/admins",        verifyAccessToken, authorizeRoles("superadmin"), getAllAdmins);
+router.get("/admins/:id",    verifyAccessToken, authorizeRoles("superadmin"), getAdminById);
+router.post("/admins",       verifyAccessToken, authorizeRoles("superadmin"), createAdmin);
+router.put("/admins/:id",    verifyAccessToken, authorizeRoles("superadmin"), updateAdmin);
+router.delete("/admins/:id", verifyAccessToken, authorizeRoles("superadmin"), deleteAdmin);
 
 export default router;

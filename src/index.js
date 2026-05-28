@@ -25,6 +25,7 @@ import taskRoutes from "./routes/taskRoutes.js";
 
 import cookieParser from "cookie-parser";
 import helmet from "helmet";
+import { errorHandler } from "./middleware/errorHandler.js";
 
 dotenv.config();
 
@@ -73,6 +74,9 @@ const startServer = async () => {
     app.use("/api/dashboard", dashboardRoutes);
     app.use("/api/tasks", taskRoutes);
     app.use("/easyparcel", easyParcelRoutes);
+
+    app.use((req, res) => res.status(404).json({ success: false, message: "Route not found" }));
+    app.use(errorHandler);
 
     // === CRITICAL: Create HTTP server FIRST ===
     const httpServer = http.createServer(app);

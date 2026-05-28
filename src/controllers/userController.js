@@ -1,500 +1,174 @@
-import User from "../models/User.js";
-import Graduate from "../models/Graduate.js";
-import Staff from "../models/Staff.js";
-import Admin from "../models/Admin.js";
-import bcrypt from "bcrypt";
-import crypto from "crypto";
-import { sendWelcomeEmail } from "../utils/sendWelcomeEmail.js";
+import * as userService from "../services/userService.js";
 
-const userProjection = "-refreshToken -password -passwordResetToken -__v";
+// ─── Current User ─────────────────────────────────────────────────────────────
 
-export const getMe = async (req, res) => {
+export const getMe = async (req, res, next) => {
   try {
-    const user = await User.findById(req.user.userId).select("fullName email phone role");
-    if (!user) return res.status(404).json({ success: false, message: "User not found" });
-    res.json({ success: true, data: user });
-  } catch (error) {
-    res.status(500).json({ success: false, message: "Server error" });
+    const data = await userService.getUserMe(req.user.userId);
+    res.json({ success: true, data });
+  } catch (err) {
+    next(err);
   }
 };
 
-export const updateMe = async (req, res) => {
+export const updateMe = async (req, res, next) => {
   try {
-    const { fullName, phone } = req.body;
-    const user = await User.findByIdAndUpdate(
-      req.user.userId,
-      { fullName, phone },
-      { new: true, runValidators: true }
-    ).select("fullName email phone role");
-    if (!user) return res.status(404).json({ success: false, message: "User not found" });
-    res.json({ success: true, data: user });
-  } catch (error) {
-    res.status(500).json({ success: false, message: "Server error" });
+    const data = await userService.updateUserMe(req.user.userId, req.body);
+    res.json({ success: true, data });
+  } catch (err) {
+    next(err);
   }
 };
 
-export const getAllGraduates = async (req, res) => {
+// ─── Graduate ─────────────────────────────────────────────────────────────────
+
+export const getAllGraduates = async (req, res, next) => {
   try {
-    const { search, page = 1, limit = 20 } = req.query;
-
-    const filter = search
-      ? { $or: [{ fullName: { $regex: search, $options: "i" } }, { email: { $regex: search, $options: "i" } }] }
-      : {};
-
-    const skip = (Number(page) - 1) * Number(limit);
-
-    const total = await Graduate.countDocuments(filter);
-
-    const graduates = await Graduate.find(filter)
-      .select(userProjection)
-      .sort({ createdAt: -1 })
-      .skip(skip)
-      .limit(Number(limit));
-
-    res.json({
-      success: true,
-      data: graduates,
-      count: graduates.length,
-      pagination: {
-        total,
-        page: Number(page),
-        limit: Number(limit),
-        totalPages: Math.ceil(total / Number(limit)),
-      },
-    });
-  } catch (error) {
-    console.error("Get All Graduates Error:", error);
-    res.status(500).json({ 
-      success: false, 
-      message: "Failed to fetch graduates" 
-    });
+    const result = await userService.listGraduates(req.query);
+    res.json({ success: true, ...result });
+  } catch (err) {
+    next(err);
   }
 };
 
-export const getGraduateById = async (req, res) => {
+export const getGraduateById = async (req, res, next) => {
   try {
-    const graduate = await Graduate.findById(req.params.id)
-      .select(userProjection);
-    if (!graduate) {
-      return res.status(404).json({ message: "Graduate not found" });
-    }
-    res.json({ success: true, data: graduate });
-  } catch (error) {
-    res.status(500).json({ message: "Server error" });
+    const data = await userService.getGraduate(req.params.id);
+    res.json({ success: true, data });
+  } catch (err) {
+    next(err);
   }
 };
 
-// Create new graduate with auto-generated password
-export const createGraduate = async (req, res) => {
+export const createGraduate = async (req, res, next) => {
   try {
-    const { fullName, email, phone } = req.body;
-
-    if (!fullName || !email || !phone) {
-      return res.status(400).json({
-        success: false,
-        message: "Please provide fullName, email and phone"
-      });
-    }
-
-    // Generate a random password (e.g. 10 characters)
-    const randomPassword = crypto.randomBytes(5).toString('hex'); // Example: "a1b2c3d4e5"
-
-    // Hash the password before saving
-    const hashedPassword = await bcrypt.hash(randomPassword, 10);
-
-    // Create the graduate
-    const graduate = await Graduate.create({
-      fullName,
-      email,
-      phone,
-      password: hashedPassword,
-      role: 'graduate',
-    });
-
-    await sendWelcomeEmail({ fullName, email, password: randomPassword, role: 'graduate', phone });
-
+    const data = await userService.createGraduate(req.body);
     res.status(201).json({
       success: true,
       message: "Graduate created successfully. Password has been sent to their email.",
-      data: {
-        id: graduate._id,
-        fullName: graduate.fullName,
-        email: graduate.email,
-        phone: graduate.phone,
-        role: graduate.role
-      }
+      data,
     });
-
-  } catch (error) {
-    console.error(error);
-
-    if (error.code === 11000) {
-      return res.status(400).json({
-        success: false,
-        message: "Email already exists"
-      });
-    }
-
-    res.status(400).json({ 
-      success: false, 
-      message: error.message || "Failed to create graduate" 
-    });
+  } catch (err) {
+    next(err);
   }
 };
 
-// Update graduate
-export const updateGraduate = async (req, res) => {
+export const updateGraduate = async (req, res, next) => {
   try {
-    const graduate = await Graduate.findByIdAndUpdate(
-      req.params.id,
-      req.body,
-      { returnDocument: "after", runValidators: true }
-    );
-
-    if (!graduate) {
-      return res.status(404).json({ message: "Graduate not found" });
-    }
-
-    res.json({
-      success: true,
-      message: "Graduate updated successfully",
-      data: graduate,
-    });
-  } catch (error) {
-    res.status(400).json({ message: error.message });
+    const data = await userService.updateGraduate(req.params.id, req.body);
+    res.json({ success: true, message: "Graduate updated successfully", data });
+  } catch (err) {
+    next(err);
   }
 };
 
-// Delete graduate
-export const deleteGraduate = async (req, res) => {
+export const deleteGraduate = async (req, res, next) => {
   try {
-    const graduate = await Graduate.findByIdAndDelete(req.params.id);
-    if (!graduate) {
-      return res.status(404).json({ message: "Graduate not found" });
-    }
-
-    res.json({ 
-      success: true, 
-      message: "Graduate deleted successfully" 
-    });
-  } catch (error) {
-    res.status(500).json({ message: "Server error" });
+    await userService.deleteGraduate(req.params.id);
+    res.json({ success: true, message: "Graduate deleted successfully" });
+  } catch (err) {
+    next(err);
   }
 };
 
-// ==================== STAFF CRUD ====================
+// ─── Staff ────────────────────────────────────────────────────────────────────
 
-// Get all staff
-export const getAllStaff = async (req, res) => {
+export const getAllStaff = async (req, res, next) => {
   try {
-    const { search, page = 1, limit = 20 } = req.query;
-
-    const filter = search
-      ? { $or: [{ fullName: { $regex: search, $options: "i" } }, { email: { $regex: search, $options: "i" } }, { department: { $regex: search, $options: "i" } }] }
-      : {};
-
-    const skip = (Number(page) - 1) * Number(limit);
-
-    const total = await Staff.countDocuments(filter);
-
-    const staff = await Staff.find(filter)
-      .select(userProjection)
-      .sort({ createdAt: -1 })
-      .skip(skip)
-      .limit(Number(limit));
-
-    res.json({
-      success: true,
-      data: staff,
-      count: staff.length,
-      pagination: {
-        total,
-        page: Number(page),
-        limit: Number(limit),
-        totalPages: Math.ceil(total / Number(limit)),
-      },
-    });
-  } catch (error) {
-    console.error("Get All Staff Error:", error);
-    res.status(500).json({ 
-      success: false, 
-      message: "Failed to fetch staff" 
-    });
+    const result = await userService.listStaff(req.query);
+    res.json({ success: true, ...result });
+  } catch (err) {
+    next(err);
   }
 };
 
-// Get single staff
-export const getStaffById = async (req, res) => {
+export const getStaffById = async (req, res, next) => {
   try {
-    const staff = await Staff.findById(req.params.id)
-      .select(userProjection);
-    if (!staff) {
-      return res.status(404).json({ message: "Staff not found" });
-    }
-    res.json({ success: true, data: staff });
-  } catch (error) {
-    res.status(500).json({ message: "Server error" });
+    const data = await userService.getStaff(req.params.id);
+    res.json({ success: true, data });
+  } catch (err) {
+    next(err);
   }
 };
 
-// Create new staff with auto-generated password
-export const createStaff = async (req, res) => {
+export const createStaff = async (req, res, next) => {
   try {
-    const { fullName, email, phone, department } = req.body;
-
-    if (!fullName || !email || !phone || !department) {
-      return res.status(400).json({
-        success: false,
-        message: "Please provide fullName, email, phone and department"
-      });
-    }
-
-    // Generate a random password
-    const randomPassword = crypto.randomBytes(8).toString('hex'); // 16 characters
-
-    // Hash the password before saving
-    const hashedPassword = await bcrypt.hash(randomPassword, 10);
-
-    // Create the staff member
-    const staff = await Staff.create({
-      fullName,
-      email,
-      phone,
-      department,
-      password: hashedPassword,
-      role: 'staff',                    // Important: Set role as 'staff'
-    });
-
-    await sendWelcomeEmail({ fullName, email, password: randomPassword, role: 'staff', phone, department });
-
+    const data = await userService.createStaff(req.body);
     res.status(201).json({
       success: true,
       message: "Staff created successfully. Password has been sent to their email.",
-      data: {
-        id: staff._id,
-        fullName: staff.fullName,
-        email: staff.email,
-        phone: staff.phone,
-        department: staff.department,
-        role: staff.role
-      }
+      data,
     });
-
-  } catch (error) {
-    console.error(error);
-
-    if (error.code === 11000) {
-      return res.status(400).json({
-        success: false,
-        message: "Email already exists"
-      });
-    }
-
-    res.status(400).json({ 
-      success: false, 
-      message: error.message || "Failed to create staff" 
-    });
+  } catch (err) {
+    next(err);
   }
 };
 
-// Update staff
-export const updateStaff = async (req, res) => {
+export const updateStaff = async (req, res, next) => {
   try {
-    const staff = await Staff.findByIdAndUpdate(
-      req.params.id,
-      req.body,
-      { returnDocument: "after", runValidators: true }
-    );
-
-    if (!staff) {
-      return res.status(404).json({ message: "Staff not found" });
-    }
-
-    res.json({
-      success: true,
-      message: "Staff updated successfully",
-      data: staff,
-    });
-  } catch (error) {
-    res.status(400).json({ message: error.message });
+    const data = await userService.updateStaff(req.params.id, req.body);
+    res.json({ success: true, message: "Staff updated successfully", data });
+  } catch (err) {
+    next(err);
   }
 };
 
-// Delete staff
-export const deleteStaff = async (req, res) => {
+export const deleteStaff = async (req, res, next) => {
   try {
-    const staff = await Staff.findByIdAndDelete(req.params.id);
-    if (!staff) {
-      return res.status(404).json({ message: "Staff not found" });
-    }
-
-    res.json({ 
-      success: true, 
-      message: "Staff deleted successfully" 
-    });
-  } catch (error) {
-    res.status(500).json({ message: "Server error" });
+    await userService.deleteStaff(req.params.id);
+    res.json({ success: true, message: "Staff deleted successfully" });
+  } catch (err) {
+    next(err);
   }
 };
 
-// ==================== ADMIN CRUD ====================
+// ─── Admin ────────────────────────────────────────────────────────────────────
 
-// Get all admins
-export const getAllAdmins = async (req, res) => {
+export const getAllAdmins = async (req, res, next) => {
   try {
-    const { search, page = 1, limit = 20 } = req.query;
-
-    const filter = search
-      ? { $or: [{ fullName: { $regex: search, $options: "i" } }, { email: { $regex: search, $options: "i" } }] }
-      : {};
-
-    const skip = (Number(page) - 1) * Number(limit);
-
-    const total = await Admin.countDocuments(filter);
-
-    const admins = await Admin.find(filter)
-      .select(userProjection)
-      .sort({ createdAt: -1 })
-      .skip(skip)
-      .limit(Number(limit));
-
-    res.json({
-      success: true,
-      data: admins,
-      count: admins.length,
-      pagination: {
-        total,
-        page: Number(page),
-        limit: Number(limit),
-        totalPages: Math.ceil(total / Number(limit)),
-      },
-    });
-  } catch (error) {
-    console.error("Get All Admins Error:", error);
-    res.status(500).json({ 
-      success: false, 
-      message: "Failed to fetch admins" 
-    });
+    const result = await userService.listAdmins(req.query);
+    res.json({ success: true, ...result });
+  } catch (err) {
+    next(err);
   }
 };
 
-// Get single admin
-export const getAdminById = async (req, res) => {
+export const getAdminById = async (req, res, next) => {
   try {
-    const admin = await Admin.findById(req.params.id)
-      .select(userProjection);
-    if (!admin) {
-      return res.status(404).json({ message: "Admin not found" });
-    }
-    res.json({ success: true, data: admin });
-  } catch (error) {
-    res.status(500).json({ message: "Server error" });
+    const data = await userService.getAdmin(req.params.id);
+    res.json({ success: true, data });
+  } catch (err) {
+    next(err);
   }
 };
 
-// Create new admin with auto-generated password
-export const createAdmin = async (req, res) => {
+export const createAdmin = async (req, res, next) => {
   try {
-    const { fullName, email, phone, role = "admin" } = req.body;
-
-    if (!fullName || !email || !phone) {
-      return res.status(400).json({
-        success: false,
-        message: "Please provide fullName, email and phone"
-      });
-    }
-
-    // Validate admin level
-    const validRoles = ["admin", "superadmin"];
-    if (!validRoles.includes(role)) {
-      return res.status(400).json({
-        success: false,
-        message: "Invalid admin level. Must be 'admin' or 'superadmin'"
-      });
-    }
-
-    // Generate a random password
-    const randomPassword = crypto.randomBytes(8).toString('hex'); // 16 characters
-
-    // Hash the password before saving
-    const hashedPassword = await bcrypt.hash(randomPassword, 10);
-
-    // Create the admin
-    const admin = await Admin.create({
-      fullName,
-      email,
-      phone,
-      password: hashedPassword,
-      role: role,                    // 'admin' or 'superadmin'
-    });
-
-    await sendWelcomeEmail({ fullName, email, password: randomPassword, role, phone });
-
+    const data = await userService.createAdmin(req.body);
     res.status(201).json({
       success: true,
       message: "Admin created successfully. Password has been sent to their email.",
-      data: {
-        id: admin._id,
-        fullName: admin.fullName,
-        email: admin.email,
-        phone: admin.phone,
-        role: admin.role
-      }
+      data,
     });
-
-  } catch (error) {
-    console.error(error);
-
-    if (error.code === 11000) {
-      return res.status(400).json({
-        success: false,
-        message: "Email already exists"
-      });
-    }
-
-    res.status(400).json({ 
-      success: false, 
-      message: error.message || "Failed to create admin" 
-    });
+  } catch (err) {
+    next(err);
   }
 };
 
-// Update admin
-export const updateAdmin = async (req, res) => {
+export const updateAdmin = async (req, res, next) => {
   try {
-    const admin = await Admin.findByIdAndUpdate(
-      req.params.id,
-      req.body,
-      { returnDocument: "after", runValidators: true }
-    );
-
-    if (!admin) {
-      return res.status(404).json({ message: "Admin not found" });
-    }
-
-    res.json({
-      success: true,
-      message: "Admin updated successfully",
-      data: admin,
-    });
-  } catch (error) {
-    res.status(400).json({ message: error.message });
+    const data = await userService.updateAdmin(req.params.id, req.body);
+    res.json({ success: true, message: "Admin updated successfully", data });
+  } catch (err) {
+    next(err);
   }
 };
 
-// Delete admin
-export const deleteAdmin = async (req, res) => {
+export const deleteAdmin = async (req, res, next) => {
   try {
-    const admin = await Admin.findByIdAndDelete(req.params.id);
-    if (!admin) {
-      return res.status(404).json({ message: "Admin not found" });
-    }
-
-    res.json({ 
-      success: true, 
-      message: "Admin deleted successfully" 
-    });
-  } catch (error) {
-    res.status(500).json({ message: "Server error" });
+    await userService.deleteAdmin(req.params.id);
+    res.json({ success: true, message: "Admin deleted successfully" });
+  } catch (err) {
+    next(err);
   }
 };

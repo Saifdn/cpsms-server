@@ -5,19 +5,16 @@ import {
   updateSession,
   deleteSession,
 } from "../controllers/sessionController.js";
+import { verifyAccessToken, authorizeRoles } from "../middleware/authMiddleware.js";
 
 const router = express.Router();
 
-// Generate sessions (main feature)
-router.post("/generate", generateSessions);
+// Any authenticated user can view sessions (graduates need this to book)
+router.get("/", verifyAccessToken, getAllSessions);
 
-// Get sessions
-router.get("/", getAllSessions);
-
-// Update single session
-router.put("/:id", updateSession);
-
-// Delete single session
-router.delete("/:id", deleteSession);
+// Staff+ can generate, update, delete sessions
+router.post("/generate", verifyAccessToken, authorizeRoles("staff", "admin", "superadmin"), generateSessions);
+router.put("/:id",       verifyAccessToken, authorizeRoles("staff", "admin", "superadmin"), updateSession);
+router.delete("/:id",    verifyAccessToken, authorizeRoles("staff", "admin", "superadmin"), deleteSession);
 
 export default router;
