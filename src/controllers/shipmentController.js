@@ -50,3 +50,17 @@ export const getWalletBalance = async (req, res, next) => {
     next(err);
   }
 };
+
+export const mergeAwb = async (req, res, next) => {
+  try {
+    const bytes = await shipmentService.mergeAwbPdfs(req.body.shipmentIds);
+    res.set({
+      "Content-Type": "application/pdf",
+      "Content-Disposition": 'attachment; filename="awb-labels.pdf"',
+      "Content-Length": bytes.length,
+    });
+    res.send(Buffer.from(bytes));
+  } catch (err) {
+    next(err);
+  }
+};

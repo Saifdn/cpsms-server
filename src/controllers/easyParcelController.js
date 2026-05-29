@@ -18,6 +18,24 @@ export const handleEasyParcelCallback = async (req, res) => {
   res.redirect(redirect);
 };
 
+export const getEasyParcelStatus = async (req, res, next) => {
+  try {
+    const status = await easyParcelService.getEasyParcelStatus();
+    res.json(status);
+  } catch (err) {
+    next(err);
+  }
+};
+
+export const disconnectEasyParcel = async (req, res, next) => {
+  try {
+    await easyParcelService.disconnectEasyParcel();
+    res.json({ message: "EasyParcel disconnected successfully" });
+  } catch (err) {
+    next(err);
+  }
+};
+
 export const trackingStatusWebhook = async (req, res, next) => {
   try {
     await easyParcelService.handleTrackingWebhook(req.body);

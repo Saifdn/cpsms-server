@@ -1,4 +1,5 @@
 import axios from "axios";
+import { PDFDocument } from "pdf-lib";
 import Booking from "../models/Booking.js";
 import Shipment from "../models/Shipment.js";
 import Session from "../models/Session.js";
@@ -69,7 +70,13 @@ export async function getPendingShipments({ date, page, limit }) {
   }
 
   return paginateBookings(filter, { page, limit }, (q) =>
-    q.populate("graduate", "fullName email phone").populate("package", "name price").lean()
+    q
+      .populate("graduate", "fullName email phone")
+      .populate("package", "name")
+      .populate("addons", "name")
+      .populate("shipment", "receiver status")
+      .select("addons status bookingNumber")
+      .lean()
   );
 }
 
@@ -85,8 +92,9 @@ export async function getSubmittedShipments({ date, page, limit }) {
     q
       .populate("graduate", "fullName email phone")
       .populate("package", "name")
+      .populate("addons", "name")
       .populate("shipment", "receiver status awb_number awb_url courierName tracking_url")
-      .select("addons status bookingNumber totalPrice")
+      .select("addons status bookingNumber")
       .lean()
   );
 }
@@ -195,14 +203,14 @@ export async function submitOrder(
       reference: booking.bookingNumber,
       service_id: serviceId,
       collection_date: collectionDate,
-      weight: packageDetails?.weight || 0.5,
+      weight: packageDetails?.weight || 1,
       height: packageDetails?.height || 5,
       length: packageDetails?.length || 5,
       width: packageDetails?.width || 5,
       item: [
         {
           content: booking.package?.name || "Studio Session Package",
-          weight: packageDetails?.weight || 0.5,
+          weight: packageDetails?.weight || 1,
           height: packageDetails?.height || 5,
           length: packageDetails?.length || 5,
           width: packageDetails?.width || 5,
@@ -237,7 +245,7 @@ export async function submitOrder(
         country_code: receiver.country_code,
       },
       feature: {
-        sms_tracking: features?.sms_tracking || false,
+        sms_tracking: features?.sms_tracking ?? false,
         email_tracking: features?.email_tracking ?? true,
         whatsapp_tracking: features?.whatsapp_tracking ?? true,
       },
@@ -296,6 +304,40 @@ export async function submitOrder(
 
   const successCount = results.filter((r) => r.status === "success").length;
   return { processed: bookingIds.length, successCount, results };
+}
+
+export async function mergeAwbPdfs(bookingIds) {
+  if (!Array.isArray(bookingIds) || bookingIds.length === 0) {
+    throw badRequest("shipmentIds must be a non-empty array");
+  }
+
+  const shipments = await Shipment.find({
+    booking: { $in: bookingIds },
+    awb_url: { $nin: [null, ""] },
+  })
+    .select("awb_url awb_number")
+    .lean();
+
+  if (shipments.length === 0) throw notFound("No AWB labels found for the given shipments");
+
+  const merged = await PDFDocument.create();
+
+  await Promise.all(
+    shipments.map(async (s) => {
+      let bytes;
+      try {
+        const resp = await axios.get(s.awb_url, { responseType: "arraybuffer" });
+        bytes = resp.data;
+      } catch {
+        return; // skip if URL is unreachable
+      }
+      const src = await PDFDocument.load(bytes);
+      const pages = await merged.copyPages(src, src.getPageIndices());
+      pages.forEach((p) => merged.addPage(p));
+    })
+  );
+
+  return merged.save();
 }
 
 export async function getWalletBalance(epToken) {

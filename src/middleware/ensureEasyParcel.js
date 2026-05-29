@@ -1,16 +1,6 @@
-// middleware/ensureEasyParcel.js
-//
-// Drop this middleware on any route that calls the EasyParcel API.
-// It does 3 things:
-//   1. If user has no token → return EP_NOT_CONNECTED with an authUrl
-//   2. If token is expired but refresh is valid → auto-refresh silently
-//   3. If everything is fine → attach req.epToken and call next()
-//
-// The frontend intercepts EP_NOT_CONNECTED and redirects to authUrl automatically.
-// The user never needs to manually connect anything.
-
 import axios from "axios";
-import User from "../models/User.js";
+import AppConfig from "../models/AppConfig.js";
+import { encrypt, decrypt } from "../utils/crypto.js";
 import "dotenv/config";
 
 const CLIENT_ID = process.env.EP_CLIENT_ID;
@@ -23,27 +13,25 @@ const getBasicAuth = () =>
 
 const ensureEasyParcel = async (req, res, next) => {
   try {
-    const user = await User.findById(req.user.userId);
+    const config = await AppConfig.getSingleton();
 
-    // ── Case 1: No token at all ───────────────────────────────
-    if (!user.easyparcel.connected || !user.easyparcel.access_token) {
+    // ── Case 1: App not connected ─────────────────────────────
+    if (!config.easyparcel.connected || !config.easyparcel.access_token) {
       return res.status(403).json({
         code: "EP_NOT_CONNECTED",
-        // Frontend will redirect here — returnTo brings them back after OAuth
-        authUrl: `${process.env.BACKEND_URL}/easyparcel/auth/connect?userId=${req.user.userId}&returnTo=${encodeURIComponent(req.get("referer") || "/")}`,
+        authUrl: `${BACKEND_URL}/easyparcel/auth/connect?userId=${req.user.userId}&returnTo=${encodeURIComponent(req.get("referer") || "/")}`,
       });
     }
 
     // ── Case 2: Token still valid ─────────────────────────────
-    if (user.isEPTokenValid()) {
-      req.epToken = user.easyparcel.access_token;
+    if (config.isEPTokenValid()) {
+      req.epToken = decrypt(config.easyparcel.access_token);
       return next();
     }
 
     // ── Case 3: Token expired — try refresh ──────────────────
-    if (!user.isEPRefreshValid()) {
-      // Both tokens expired — user must re-authenticate
-      await User.findByIdAndUpdate(req.user.userId, {
+    if (!config.isEPRefreshValid()) {
+      await AppConfig.findByIdAndUpdate("singleton", {
         "easyparcel.connected": false,
         "easyparcel.access_token": null,
         "easyparcel.refresh_token": null,
@@ -51,18 +39,18 @@ const ensureEasyParcel = async (req, res, next) => {
 
       return res.status(403).json({
         code: "EP_NOT_CONNECTED",
-        authUrl: `${process.env.BACKEND_URL}/easyparcel/auth/connect?userId=${req.user.userId}&returnTo=${encodeURIComponent(req.get("referer") || "/")}`,
+        authUrl: `${BACKEND_URL}/easyparcel/auth/connect?userId=${req.user.userId}&returnTo=${encodeURIComponent(req.get("referer") || "/")}`,
       });
     }
 
     // Refresh the token silently
-    console.log("[EP] Refreshing token for user:", req.user.userId);
+    console.log("[EP] Refreshing app-level token");
 
     const response = await axios.post(
       "https://api.easyparcel.com/oauth/token",
       new URLSearchParams({
         grant_type: "refresh_token",
-        refresh_token: user.easyparcel.refresh_token,
+        refresh_token: decrypt(config.easyparcel.refresh_token),
         redirect_uri: REDIRECT_URI,
       }),
       {
@@ -76,9 +64,9 @@ const ensureEasyParcel = async (req, res, next) => {
     const { access_token, refresh_token, expires_at, refresh_token_expires_at } =
       response.data;
 
-    await User.findByIdAndUpdate(req.user.userId, {
-      "easyparcel.access_token": access_token,
-      "easyparcel.refresh_token": refresh_token,
+    await AppConfig.findByIdAndUpdate("singleton", {
+      "easyparcel.access_token": encrypt(access_token),
+      "easyparcel.refresh_token": encrypt(refresh_token),
       "easyparcel.expires_at": new Date(expires_at),
       "easyparcel.refresh_token_expires_at": new Date(refresh_token_expires_at),
     });
