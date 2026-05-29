@@ -1,8 +1,10 @@
 import axios from "axios";
-import User from "../models/User.js";
+import AppConfig from "../models/AppConfig.js";
 import Shipment from "../models/Shipment.js";
 import Booking from "../models/Booking.js";
 import { getShipmentStatus } from "../utils/easyparcelStatus.js";
+import { encrypt, decrypt } from "../utils/crypto.js";
+import "dotenv/config";
 
 const FRONTEND_URL = process.env.CLIENT_URL || "http://localhost:5173";
 const REDIRECT_URI = process.env.EP_REDIRECT_URI;
@@ -69,14 +71,19 @@ export async function handleOAuthCallback(session, { code, state }) {
 
     const { access_token, refresh_token, expires_at, refresh_token_expires_at } = response.data;
 
-    await User.findByIdAndUpdate(userId, {
-      "easyparcel.access_token": access_token,
-      "easyparcel.refresh_token": refresh_token,
-      "easyparcel.expires_at": new Date(expires_at),
-      "easyparcel.refresh_token_expires_at": new Date(refresh_token_expires_at),
-      "easyparcel.connected": true,
-      "easyparcel.connected_at": new Date(),
-    });
+    await AppConfig.findByIdAndUpdate(
+      "singleton",
+      {
+        "easyparcel.access_token": encrypt(access_token),
+        "easyparcel.refresh_token": encrypt(refresh_token),
+        "easyparcel.expires_at": new Date(expires_at),
+        "easyparcel.refresh_token_expires_at": new Date(refresh_token_expires_at),
+        "easyparcel.connected": true,
+        "easyparcel.connected_at": new Date(),
+        "easyparcel.connected_by": userId,
+      },
+      { upsert: true }
+    );
 
     const returnTo = session.oauthReturnTo || "/shipment-management";
     delete session.oauthState;
@@ -88,6 +95,31 @@ export async function handleOAuthCallback(session, { code, state }) {
     console.error("[EasyParcel OAuth Error]", err.response?.data || err.message);
     return { redirect: `${FRONTEND_URL}?ep_error=token_failed` };
   }
+}
+
+export async function disconnectEasyParcel() {
+  await AppConfig.findByIdAndUpdate("singleton", {
+    "easyparcel.access_token": null,
+    "easyparcel.refresh_token": null,
+    "easyparcel.expires_at": null,
+    "easyparcel.refresh_token_expires_at": null,
+    "easyparcel.connected": false,
+    "easyparcel.connected_at": null,
+    "easyparcel.connected_by": null,
+  });
+}
+
+export async function getEasyParcelStatus() {
+  const config = await AppConfig.getSingleton();
+  const ep = config.easyparcel;
+  // Never expose raw or decrypted tokens to the client
+  return {
+    connected: ep.connected,
+    connected_at: ep.connected_at,
+    connected_by: ep.connected_by,
+    token_expires_at: ep.expires_at,
+    refresh_token_expires_at: ep.refresh_token_expires_at,
+  };
 }
 
 // ─── Tracking webhook ─────────────────────────────────────────────────────────
