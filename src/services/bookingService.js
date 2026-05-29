@@ -202,7 +202,7 @@ export async function createBooking({ graduate: graduateId, package: packageId, 
   }
 
   const billplzResponse = await axios.post(
-    "${BILLPLZ_API_URL}/bills",
+    `${BILLPLZ_API_URL}/bills`,
     {
       collection_id: process.env.BILLPLZ_COLLECTION_ID,
       email: user.email,
