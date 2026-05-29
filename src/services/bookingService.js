@@ -11,7 +11,7 @@ import Queue from "../models/Queue.js";
 import { sendBookingConfirmation } from "../utils/sendBookingEmail.js";
 import { broadcastQueueUpdate } from "../config/socket.js";
 
-const BILLPLZ_API_URL = process.env.BILLPLZ_API_URL || "https://www.billplz-sandbox.com/api/v3/bills";
+const BILLPLZ_API_URL = process.env.BILLPLZ_API_URL || "https://www.billplz-sandbox.com/api/v3";
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
