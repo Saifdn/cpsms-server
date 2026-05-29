@@ -1,8 +1,8 @@
 // index.js  (or server.js)
+import "./env.js";
 import express from "express";
 import http from "http";
 import cors from "cors";
-import dotenv from "dotenv";
 import session from "express-session";
 
 import connectDB from "./config/db.js";
@@ -26,8 +26,6 @@ import taskRoutes from "./routes/taskRoutes.js";
 import cookieParser from "cookie-parser";
 import helmet from "helmet";
 import { errorHandler } from "./middleware/errorHandler.js";
-
-dotenv.config();
 
 const app = express();
 
