@@ -1,4 +1,5 @@
 import axios from "axios";
+import { PDFDocument } from "pdf-lib";
 import Booking from "../models/Booking.js";
 import Shipment from "../models/Shipment.js";
 import Session from "../models/Session.js";
@@ -303,6 +304,40 @@ export async function submitOrder(
 
   const successCount = results.filter((r) => r.status === "success").length;
   return { processed: bookingIds.length, successCount, results };
+}
+
+export async function mergeAwbPdfs(bookingIds) {
+  if (!Array.isArray(bookingIds) || bookingIds.length === 0) {
+    throw badRequest("shipmentIds must be a non-empty array");
+  }
+
+  const shipments = await Shipment.find({
+    booking: { $in: bookingIds },
+    awb_url: { $nin: [null, ""] },
+  })
+    .select("awb_url awb_number")
+    .lean();
+
+  if (shipments.length === 0) throw notFound("No AWB labels found for the given shipments");
+
+  const merged = await PDFDocument.create();
+
+  await Promise.all(
+    shipments.map(async (s) => {
+      let bytes;
+      try {
+        const resp = await axios.get(s.awb_url, { responseType: "arraybuffer" });
+        bytes = resp.data;
+      } catch {
+        return; // skip if URL is unreachable
+      }
+      const src = await PDFDocument.load(bytes);
+      const pages = await merged.copyPages(src, src.getPageIndices());
+      pages.forEach((p) => merged.addPage(p));
+    })
+  );
+
+  return merged.save();
 }
 
 export async function getWalletBalance(epToken) {

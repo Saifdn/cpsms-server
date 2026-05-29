@@ -7,6 +7,7 @@ import {
   getQuotation,
   submitOrder,
   getWalletBalance,
+  mergeAwb,
 } from "../controllers/shipmentController.js";
 
 const router = express.Router();
@@ -15,8 +16,9 @@ const router = express.Router();
 router.use(verifyAccessToken, authorizeRoles("staff", "admin", "superadmin"));
 
 // DB-only queries (no EasyParcel token needed)
-router.get("/pending",   getPendingShipments);
-router.get("/submitted", getSubmittedShipments);
+router.get("/pending",      getPendingShipments);
+router.get("/submitted",    getSubmittedShipments);
+router.post("/merge-awb",   mergeAwb);
 
 // EasyParcel API routes (token auto-refreshed by ensureEasyParcel)
 router.post("/quotation", ensureEasyParcel, getQuotation);
