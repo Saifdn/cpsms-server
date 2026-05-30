@@ -47,12 +47,12 @@ export const sendWelcomeEmail = async ({ fullName, email, password, role, phone,
           </tr>`
         : "";
 
-    // ── Logo: SVG → PNG → base64 ──────────────────────────────────────────
+    // ── Logo: SVG → PNG buffer ────────────────────────────────────────────
     const { default: sharp } = await import("sharp");
-    const logoBase64 = (await sharp(Buffer.from(LOGO_SVG))
+    const logoBuffer = await sharp(Buffer.from(LOGO_SVG))
       .resize(480, 136, { fit: "contain", background: { r: 139, g: 48, b: 32, alpha: 0 } })
       .png()
-      .toBuffer()).toString("base64");
+      .toBuffer();
 
     // ── HTML ───────────────────────────────────────────────────────────────
     const html = `
@@ -84,7 +84,7 @@ export const sendWelcomeEmail = async ({ fullName, email, password, role, phone,
         <tr>
           <td align="center" style="padding:36px 48px 32px;
                                     border-bottom:1px solid ${C.border};">
-            <img src="data:image/png;base64,${logoBase64}" alt="Kelab Fotokreatif Studio"
+            <img src="cid:logo" alt="Kelab Fotokreatif Studio"
                  width="240" height="68"
                  style="display:block;margin:0 auto;" />
           </td>
@@ -206,6 +206,9 @@ export const sendWelcomeEmail = async ({ fullName, email, password, role, phone,
       to: email,
       subject: `Your ${label} Account — Kelab Fotokreatif`,
       html,
+      attachments: [
+        { filename: "logo.png", content: logoBuffer, content_id: "logo" },
+      ],
     });
 
     console.log(`✅ Welcome email sent to ${email}`);
