@@ -9,8 +9,6 @@ export const sendBookingConfirmation = async (booking) => {
       margin: 2,
       color: { dark: "#8B3020", light: "#FFFFFF" },
     });
-    const qrBase64 = qrBuffer.toString("base64");
-
     const resend = getResendClient();
 
     // ── Helpers ────────────────────────────────────────────────────────────
@@ -281,7 +279,7 @@ export const sendBookingConfirmation = async (booking) => {
           </td>
         </tr>
 
-        <!-- ══ QR CODE ════════════════════════════════════════════════════ -->
+        <!-- ══ QR CODE + CTA ═════════════════════════════════════════════ -->
         <tr>
           <td align="center" style="padding:32px 48px;">
             <div style="font-family:${F};font-size:11px;letter-spacing:1.5px;
@@ -291,24 +289,26 @@ export const sendBookingConfirmation = async (booking) => {
             </div>
             <div style="font-family:${F};font-size:13px;color:${C.muted};
                         margin-bottom:24px;line-height:1.5;">
-              Present this QR code upon arrival on the day of your session
+              Your QR code is attached to this email. Present it upon arrival on the day of your session.
             </div>
-            <table cellpadding="0" cellspacing="0" border="0"
-                   style="margin:0 auto;background-color:#FFFFFF;
-                          border:1px solid ${C.border};border-radius:4px;">
+            <div style="font-family:'Courier New',Courier,monospace;font-size:14px;
+                        color:${C.primary};font-weight:700;letter-spacing:2px;
+                        margin-bottom:28px;">
+              ${booking.bookingNumber}
+            </div>
+            <table cellpadding="0" cellspacing="0" border="0" style="margin:0 auto;">
               <tr>
-                <td style="padding:24px;">
-                  <img src="data:image/png;base64,${qrBase64}"
-                       alt="Booking QR Code — ${booking.bookingNumber}"
-                       width="180" height="180"
-                       style="display:block;" />
+                <td align="center" style="background-color:${C.primary};border-radius:4px;">
+                  <a href="${process.env.CLIENT_URL}/my-bookings/${booking._id}"
+                     style="display:inline-block;padding:14px 36px;
+                            font-family:${F};font-size:14px;font-weight:600;
+                            color:#FFFFFF;text-decoration:none;
+                            letter-spacing:0.3px;border-radius:4px;">
+                    View Booking Details
+                  </a>
                 </td>
               </tr>
             </table>
-            <div style="font-family:'Courier New',Courier,monospace;font-size:12px;
-                        color:${C.muted};letter-spacing:1px;margin-top:12px;">
-              ${booking.bookingNumber}
-            </div>
           </td>
         </tr>
 
@@ -364,6 +364,9 @@ export const sendBookingConfirmation = async (booking) => {
       to: booking.graduate?.email,
       subject: `Booking Confirmed — #${booking.bookingNumber} - Kelab Fotokreatif`,
       html: htmlContent,
+      attachments: [
+        { filename: `${booking.bookingNumber}-qrcode.png`, content: qrBuffer },
+      ],
     });
 
     console.log(`✅ Booking confirmation sent to ${booking.graduate?.email}`);
