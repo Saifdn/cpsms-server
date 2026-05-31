@@ -82,14 +82,10 @@ const bookingSchema = new mongoose.Schema(
   }
 );
 
-// 🔥 Index for performance
 bookingSchema.index({ status: 1 });
 bookingSchema.index({ session: 1 });
 bookingSchema.index({ paymentStatus: 1 });
 
-// 🔥 Auto-generate booking number
-// Auto-generate booking number
-// 🔥 Auto-generate booking number
 bookingSchema.pre("save", async function () {
   if (!this.bookingNumber) {
     const dateStr = format(new Date(), "yyyyMMdd");
