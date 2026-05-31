@@ -206,6 +206,7 @@ export async function createBooking({ graduate: graduateId, package: packageId, 
     {
       collection_id: process.env.BILLPLZ_COLLECTION_ID,
       email: user.email,
+      mobile: user.phone,
       name: user.fullName,
       amount: totalAmount * 100,
       description: `Booking #${booking.bookingNumber}`,
@@ -376,7 +377,7 @@ export async function handleBillplzCallback(body) {
       console.error("sendBookingConfirmation failed:", err)
     );
   } else {
-    booking.status = "pending";
+    booking.status = "canceled";
     booking.paymentStatus = "failed";
   }
 
