@@ -40,7 +40,7 @@ export async function checkIn(bookingNumber) {
   await booking.save();
   await broadcastQueueUpdate();
 
-  return queueEntry;
+  return { queueNumber: queueEntry.queueNumber };
 }
 
 export async function callNext(studioId) {

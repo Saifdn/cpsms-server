@@ -1,5 +1,22 @@
 import mongoose from "mongoose";
 
+const dailyCounterSchema = new mongoose.Schema({
+  _id: String, // date string "YYYY-MM-DD"
+  seq: { type: Number, default: 0 },
+});
+
+const DailyCounter = mongoose.models.DailyCounter || mongoose.model("DailyCounter", dailyCounterSchema);
+
+async function nextQueueNumber() {
+  const today = new Date().toISOString().slice(0, 10);
+  const doc = await DailyCounter.collection.findOneAndUpdate(
+    { _id: today },
+    [{ $set: { seq: { $add: [{ $ifNull: ["$seq", 1000] }, 1] } } }],
+    { upsert: true, returnDocument: "after" }
+  );
+  return doc.seq;
+}
+
 const queueSchema = new mongoose.Schema(
   {
     booking: {
@@ -62,21 +79,10 @@ const queueSchema = new mongoose.Schema(
 queueSchema.index({ status: 1, queueNumber: 1 });
 queueSchema.index({ checkInTime: 1 });
 
-// Auto-assign queue number - CLEAN VERSION
+// Auto-assign queue number atomically using a daily counter document
 queueSchema.pre("validate", async function () {
-  try {
-    if (!this.queueNumber) {
-      const Queue = this.constructor;
-      const startOfDay = new Date();
-      startOfDay.setHours(0, 0, 0, 0);
-      const count = await Queue.countDocuments({
-        checkInTime: { $gte: startOfDay },
-      });
-      this.queueNumber = count + 1;
-    }
-  } catch (err) {
-    console.error("Queue number generation error:", err);
-    throw err; // re-throw so Mongoose knows something went wrong
+  if (!this.queueNumber) {
+    this.queueNumber = await nextQueueNumber();
   }
 });
 
