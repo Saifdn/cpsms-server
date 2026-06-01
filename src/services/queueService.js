@@ -108,6 +108,26 @@ export async function checkOut(queueId) {
   await broadcastQueueUpdate();
 }
 
+export async function getQueueStatusByBooking(bookingId) {
+  if (!bookingId) throw badRequest("bookingId is required");
+
+  const queueEntry = await Queue.findOne({ booking: bookingId })
+    .populate("studio", "name location")
+    .select("status queueNumber studio");
+
+  if (!queueEntry) throw notFound("No queue entry found for this booking");
+
+  let ahead = 0;
+  if (["waiting", "called"].includes(queueEntry.status)) {
+    ahead = await Queue.countDocuments({
+      status: { $in: ["waiting", "called"] },
+      queueNumber: { $lt: queueEntry.queueNumber },
+    });
+  }
+
+  return { ...queueEntry.toObject(), ahead };
+}
+
 export async function skipCustomer(bookingId) {
   if (!bookingId) throw badRequest("bookingId is required");
 
