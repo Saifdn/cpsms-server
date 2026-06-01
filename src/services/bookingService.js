@@ -56,6 +56,14 @@ function verifyBillplzSignature(payload, xSignature, secretKey) {
   return generatedSignature === xSignature;
 }
 
+async function fetchBillplzBillStatus(billId) {
+  const response = await axios.get(
+    `${BILLPLZ_API_URL}/bills/${billId}`,
+    { auth: { username: process.env.BILLPLZ_API_KEY, password: "" } }
+  );
+  return response.data;
+}
+
 // ─── Graduate-scoped queries ──────────────────────────────────────────────────
 
 export async function getMyBookings(userId, { status } = {}) {
@@ -336,8 +344,40 @@ export async function cancelBooking(id) {
 
 // ─── Billplz webhook ──────────────────────────────────────────────────────────
 
+async function applyPaymentResult(payment, booking, isPaid, paidAmountCents) {
+  const wasAlreadyPaid = payment.paymentStatus === "paid" || booking.paymentStatus === "paid";
+
+  payment.paidAmount = paidAmountCents ? paidAmountCents / 100 : 0;
+  payment.paymentStatus = isPaid ? "paid" : "failed";
+  if (isPaid) payment.paidAt = new Date();
+  await payment.save();
+
+  if (isPaid) {
+    booking.status = "booked";
+    booking.paymentStatus = "paid";
+    booking.totalPrice = payment.paidAmount;
+    if (!wasAlreadyPaid) {
+      const session = await Session.findById(booking.session);
+      if (session) {
+        session.bookedCount += 1;
+        session.status = session.bookedCount >= session.capacity ? "full" : "available";
+        await session.save();
+      }
+    }
+    sendBookingConfirmation(booking).catch((err) =>
+      console.error("sendBookingConfirmation failed:", err)
+    );
+  } else {
+    booking.status = "cancelled";
+    booking.paymentStatus = "failed";
+  }
+
+  await booking.save();
+  console.log(`[payment] Booking ${booking.bookingNumber} → ${payment.paymentStatus}`);
+}
+
 export async function handleBillplzCallback(body) {
-  const { id, paid_amount, paid_at, paid, x_signature } = body;
+  const { id, paid_amount, paid, x_signature } = body;
 
   if (!verifyBillplzSignature(body, x_signature, process.env.BILLPLZ_X_SIGNATURE)) {
     throw badRequest("Invalid signature");
@@ -353,34 +393,45 @@ export async function handleBillplzCallback(body) {
     .populate("addons", "name price");
   if (!booking) throw notFound();
 
-  const session = await Session.findById(booking.session);
-  if (!session) throw notFound("Session not found");
-
   const isPaid = paid === "true";
-  const wasAlreadyPaid = payment.paymentStatus === "paid" || booking.paymentStatus === "paid";
+  await applyPaymentResult(payment, booking, isPaid, paid_amount ? Number(paid_amount) : 0);
+}
 
-  payment.paidAmount = paid_amount ? paid_amount / 100 : 0;
-  payment.paymentStatus = isPaid ? "paid" : "failed";
-  if (isPaid) payment.paidAt = new Date();
-  await payment.save();
+export async function reconcilePaymentById(paymentDoc) {
+  if (paymentDoc.paymentStatus !== "pending" || !paymentDoc.gatewayTransactionId) return false;
 
-  if (isPaid) {
-    booking.status = "booked";
-    booking.paymentStatus = "paid";
-    booking.totalPrice = payment.paidAmount;
-    if (!wasAlreadyPaid) {
-      session.bookedCount += 1;
-      session.status = session.bookedCount >= session.capacity ? "full" : "available";
-      await session.save();
+  let billData;
+  try {
+    billData = await fetchBillplzBillStatus(paymentDoc.gatewayTransactionId);
+  } catch (err) {
+    if (err.response?.status === 404) {
+      const payment = paymentDoc.save ? paymentDoc : await Payment.findById(paymentDoc._id);
+      const booking = await Booking.findById(payment.booking)
+        .populate("graduate", "fullName email phone")
+        .populate("package", "name price services")
+        .populate("addons", "name price");
+      if (payment && booking) {
+        await applyPaymentResult(payment, booking, false, 0);
+        return true;
+      }
     }
-    sendBookingConfirmation(booking).catch((err) =>
-      console.error("sendBookingConfirmation failed:", err)
-    );
-  } else {
-    booking.status = "canceled";
-    booking.paymentStatus = "failed";
+    console.error(`[reconcile] Billplz API error for bill ${paymentDoc.gatewayTransactionId}:`, err.message);
+    return false;
   }
 
-  await booking.save();
-  console.log(`Booking ${booking.bookingNumber} payment updated to ${payment.paymentStatus}`);
+  const payment = paymentDoc.save ? paymentDoc : await Payment.findById(paymentDoc._id);
+  const booking = await Booking.findById(payment.booking)
+    .populate("graduate", "fullName email phone")
+    .populate("package", "name price services")
+    .populate("addons", "name price");
+
+  if (!payment || !booking) return false;
+
+  await applyPaymentResult(
+    payment,
+    booking,
+    billData.paid === true,
+    billData.paid_amount ? Number(billData.paid_amount) : 0
+  );
+  return true;
 }

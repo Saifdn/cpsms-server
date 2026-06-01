@@ -19,8 +19,6 @@ const paymentSchema = new mongoose.Schema(
         "pending",
         "paid",
         "failed",
-        "expired",
-        "refunded"
       ],
       default: "pending",
     },

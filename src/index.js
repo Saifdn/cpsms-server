@@ -44,6 +44,7 @@ import taskRoutes from "./routes/taskRoutes.js";
 import cookieParser from "cookie-parser";
 import helmet from "helmet";
 import { errorHandler } from "./middleware/errorHandler.js";
+import { startReconciliationJob } from "./jobs/reconcilePayments.js";
 
 const app = express();
 
@@ -76,6 +77,8 @@ const startServer = async () => {
   try {
     await connectDB();
     console.log("✅ MongoDB Connected");
+
+    startReconciliationJob();
 
     await generateLogo();
 
