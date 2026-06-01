@@ -54,6 +54,15 @@ export const getQueueStatusByBooking = async (req, res, next) => {
   }
 };
 
+export const getQueueLog = async (req, res, next) => {
+  try {
+    const result = await queueService.getQueueLog(req.query);
+    res.json({ success: true, ...result });
+  } catch (err) {
+    next(err);
+  }
+};
+
 export const skipCustomer = async (req, res, next) => {
   try {
     const data = await queueService.skipCustomer(req.body.bookingId);

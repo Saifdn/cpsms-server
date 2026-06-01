@@ -128,6 +128,34 @@ export async function getQueueStatusByBooking(bookingId) {
   return { ...queueEntry.toObject(), ahead };
 }
 
+export async function getQueueLog({ page = 1, limit = 20 } = {}) {
+  const pageNum = Number(page);
+  const limitNum = Number(limit);
+  const skip = (pageNum - 1) * limitNum;
+
+  const [total, data] = await Promise.all([
+    Queue.countDocuments(),
+    Queue.find()
+      .populate("studio", "name location")
+      .select("status startTime endTime checkInTime queueNumber")
+      .sort({ checkInTime: -1 })
+      .skip(skip)
+      .limit(limitNum)
+      .lean(),
+  ]);
+
+  return {
+    data,
+    count: data.length,
+    pagination: {
+      total,
+      page: pageNum,
+      limit: limitNum,
+      totalPages: Math.ceil(total / limitNum),
+    },
+  };
+}
+
 export async function skipCustomer(bookingId) {
   if (!bookingId) throw badRequest("bookingId is required");
 

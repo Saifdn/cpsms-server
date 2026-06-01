@@ -1,6 +1,7 @@
 import express from "express";
 import {
   getActiveQueue,
+  getQueueLog,
   getQueueStatusByBooking,
   checkIn,
   callNext,
@@ -18,6 +19,9 @@ router.use(verifyAccessToken);
 // Any authenticated user can view the active queue (graduates can see their position)
 router.get("/active", getActiveQueue);
 router.get("/status/:bookingId", getQueueStatusByBooking);
+
+// Staff+ only — full paginated queue log
+router.get("/log", authorizeRoles("staff", "admin", "superadmin"), getQueueLog);
 
 // Staff+ only — all queue state mutations
 router.post("/checkin",          authorizeRoles("staff", "admin", "superadmin"), checkIn);

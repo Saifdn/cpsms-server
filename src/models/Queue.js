@@ -76,7 +76,6 @@ const queueSchema = new mongoose.Schema(
 );
 
 // Indexes
-queueSchema.index({ status: 1, queueNumber: 1 });
 queueSchema.index({ checkInTime: 1 });
 
 // Auto-assign queue number atomically using a daily counter document
