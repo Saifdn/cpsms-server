@@ -40,6 +40,7 @@ import shipmentRoutes from "./routes/shipmentRoutes.js";
 import easyParcelRoutes from "./routes/easyParcelRoutes.js";
 import dashboardRoutes from "./routes/dashboardRoutes.js";
 import taskRoutes from "./routes/taskRoutes.js";
+import reportRoutes from "./routes/reportRoutes.js";
 
 import cookieParser from "cookie-parser";
 import helmet from "helmet";
@@ -95,6 +96,7 @@ const startServer = async () => {
     app.use("/api/shipments", shipmentRoutes);
     app.use("/api/dashboard", dashboardRoutes);
     app.use("/api/tasks", taskRoutes);
+    app.use("/api/reports", reportRoutes);
     app.use("/easyparcel", easyParcelRoutes);
 
     app.use((req, res) => res.status(404).json({ success: false, message: "Route not found" }));
