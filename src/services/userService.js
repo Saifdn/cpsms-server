@@ -18,6 +18,18 @@ function generatePassword() {
   return crypto.randomBytes(8).toString("hex"); // 16-char hex
 }
 
+function toTitleCase(str) {
+  return str.trim().replace(/\b\w/g, (c) => c.toUpperCase());
+}
+
+function normalizeUser(fields) {
+  const out = { ...fields };
+  if (out.fullName) out.fullName = toTitleCase(out.fullName);
+  if (out.email) out.email = out.email.trim().toLowerCase();
+  if (out.department) out.department = toTitleCase(out.department);
+  return out;
+}
+
 function buildSearchFilter(search, fields) {
   if (!search) return {};
   const escaped = escapeRegex(search.trim());
@@ -85,9 +97,10 @@ export async function getUserMe(userId) {
 }
 
 export async function updateUserMe(userId, { fullName, phone }) {
+  const normalized = normalizeUser({ fullName, phone });
   const user = await User.findByIdAndUpdate(
     userId,
-    { fullName, phone },
+    normalized,
     { new: true, runValidators: true }
   )
     .select("fullName email phone role")
@@ -116,20 +129,22 @@ export async function createGraduate({ fullName, email, phone }) {
     throw badRequest("Please provide fullName, email and phone");
   }
 
+  const n = normalizeUser({ fullName, email, phone });
   const user = await createUser(
     Graduate,
-    { fullName, email, phone, role: "graduate" },
-    { fullName, email, phone, role: "graduate" }
+    { ...n, role: "graduate" },
+    { ...n, role: "graduate" }
   );
 
   return { id: user._id, fullName: user.fullName, email: user.email, phone: user.phone, role: user.role };
 }
 
 export async function updateGraduate(id, body) {
-  const allowed = {};
+  const raw = {};
   for (const key of GRADUATE_UPDATE_FIELDS) {
-    if (body[key] !== undefined) allowed[key] = body[key];
+    if (body[key] !== undefined) raw[key] = body[key];
   }
+  const allowed = normalizeUser(raw);
 
   const doc = await Graduate.findByIdAndUpdate(id, allowed, { new: true, runValidators: true })
     .select(USER_PROJECTION)
@@ -163,10 +178,11 @@ export async function createStaff({ fullName, email, phone, department }) {
     throw badRequest("Please provide fullName, email, phone and department");
   }
 
+  const n = normalizeUser({ fullName, email, phone, department });
   const user = await createUser(
     Staff,
-    { fullName, email, phone, department, role: "staff" },
-    { fullName, email, phone, department, role: "staff" }
+    { ...n, role: "staff" },
+    { ...n, role: "staff" }
   );
 
   return {
@@ -180,10 +196,11 @@ export async function createStaff({ fullName, email, phone, department }) {
 }
 
 export async function updateStaff(id, body) {
-  const allowed = {};
+  const raw = {};
   for (const key of STAFF_UPDATE_FIELDS) {
-    if (body[key] !== undefined) allowed[key] = body[key];
+    if (body[key] !== undefined) raw[key] = body[key];
   }
+  const allowed = normalizeUser(raw);
 
   const doc = await Staff.findByIdAndUpdate(id, allowed, { new: true, runValidators: true })
     .select(USER_PROJECTION)
@@ -221,20 +238,22 @@ export async function createAdmin({ fullName, email, phone, role = "admin" }) {
     throw badRequest("Invalid role. Must be 'admin' or 'superadmin'");
   }
 
+  const n = normalizeUser({ fullName, email, phone });
   const user = await createUser(
     Admin,
-    { fullName, email, phone, role },
-    { fullName, email, phone, role }
+    { ...n, role },
+    { ...n, role }
   );
 
   return { id: user._id, fullName: user.fullName, email: user.email, phone: user.phone, role: user.role };
 }
 
 export async function updateAdmin(id, body) {
-  const allowed = {};
+  const raw = {};
   for (const key of ADMIN_UPDATE_FIELDS) {
-    if (body[key] !== undefined) allowed[key] = body[key];
+    if (body[key] !== undefined) raw[key] = body[key];
   }
+  const allowed = normalizeUser(raw);
 
   const doc = await Admin.findByIdAndUpdate(id, allowed, { new: true, runValidators: true })
     .select(USER_PROJECTION)

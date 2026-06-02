@@ -29,6 +29,22 @@ function badRequest(message) {
   return err;
 }
 
+function toTitleCase(str) {
+  return str.trim().replace(/\b\w/g, (c) => c.toUpperCase());
+}
+
+function normalizeReceiver(receiver) {
+  if (!receiver) return receiver;
+  const out = { ...receiver };
+  if (out.name) out.name = toTitleCase(out.name);
+  if (out.email) out.email = out.email.trim().toLowerCase();
+  if (out.address_1) out.address_1 = toTitleCase(out.address_1);
+  if (out.address_2) out.address_2 = toTitleCase(out.address_2);
+  if (out.city) out.city = toTitleCase(out.city);
+  
+  return out;
+}
+
 function escapeRegex(str) {
   return str.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
@@ -204,7 +220,7 @@ export async function createBooking({ graduate: graduateId, package: packageId, 
   });
 
   if (shipmentData) {
-    const shipment = await Shipment.create({ booking: booking._id, receiver: shipmentData.receiver });
+    const shipment = await Shipment.create({ booking: booking._id, receiver: normalizeReceiver(shipmentData.receiver) });
     booking.shipment = shipment._id;
     await booking.save();
   }
@@ -272,7 +288,7 @@ export async function adminCreateBooking({ graduate: graduateId, package: packag
   });
 
   if (shipmentData) {
-    const shipment = await Shipment.create({ booking: booking._id, receiver: shipmentData.receiver });
+    const shipment = await Shipment.create({ booking: booking._id, receiver: normalizeReceiver(shipmentData.receiver) });
     booking.shipment = shipment._id;
     await booking.save();
   }
@@ -314,7 +330,7 @@ export async function cancelBooking(id) {
   if (!booking) throw notFound();
   if (booking.status === "cancelled") throw badRequest("Booking is already cancelled");
 
-  const nonCancellable = ["completed", "preparing", "delivery"];
+  const nonCancellable = ["checked-in", "in-progress", "completed", "preparing", "delivery"];
   if (nonCancellable.includes(booking.status)) {
     throw badRequest(`Cannot cancel a booking with status "${booking.status}"`);
   }
