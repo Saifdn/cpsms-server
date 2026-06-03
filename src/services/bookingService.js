@@ -1,6 +1,7 @@
 import axios from "axios";
 import crypto from "crypto";
 import Booking from "../models/Booking.js";
+import FrameOrder from "../models/FrameOrder.js";
 import Session from "../models/Session.js";
 import Payment from "../models/Payment.js";
 import Graduate from "../models/Graduate.js";
@@ -10,6 +11,7 @@ import Shipment from "../models/Shipment.js";
 import Queue from "../models/Queue.js";
 import { sendBookingConfirmation } from "../utils/sendBookingEmail.js";
 import { broadcastQueueUpdate } from "../config/socket.js";
+import { applyFrameOrderPaymentResult } from "./frameOrderService.js";
 
 const BILLPLZ_API_URL = process.env.BILLPLZ_API_URL || "https://www.billplz-sandbox.com/api/v3";
 
@@ -27,6 +29,22 @@ function badRequest(message) {
   err.statusCode = 400;
   err.isOperational = true;
   return err;
+}
+
+function toTitleCase(str) {
+  return str.trim().replace(/\b\w/g, (c) => c.toUpperCase());
+}
+
+function normalizeReceiver(receiver) {
+  if (!receiver) return receiver;
+  const out = { ...receiver };
+  if (out.name) out.name = toTitleCase(out.name);
+  if (out.email) out.email = out.email.trim().toLowerCase();
+  if (out.address_1) out.address_1 = toTitleCase(out.address_1);
+  if (out.address_2) out.address_2 = toTitleCase(out.address_2);
+  if (out.city) out.city = toTitleCase(out.city);
+  
+  return out;
 }
 
 function escapeRegex(str) {
@@ -204,7 +222,7 @@ export async function createBooking({ graduate: graduateId, package: packageId, 
   });
 
   if (shipmentData) {
-    const shipment = await Shipment.create({ booking: booking._id, receiver: shipmentData.receiver });
+    const shipment = await Shipment.create({ booking: booking._id, receiver: normalizeReceiver(shipmentData.receiver) });
     booking.shipment = shipment._id;
     await booking.save();
   }
@@ -272,7 +290,7 @@ export async function adminCreateBooking({ graduate: graduateId, package: packag
   });
 
   if (shipmentData) {
-    const shipment = await Shipment.create({ booking: booking._id, receiver: shipmentData.receiver });
+    const shipment = await Shipment.create({ booking: booking._id, receiver: normalizeReceiver(shipmentData.receiver) });
     booking.shipment = shipment._id;
     await booking.save();
   }
@@ -314,7 +332,7 @@ export async function cancelBooking(id) {
   if (!booking) throw notFound();
   if (booking.status === "cancelled") throw badRequest("Booking is already cancelled");
 
-  const nonCancellable = ["completed", "preparing", "delivery"];
+  const nonCancellable = ["checked-in", "in-progress", "completed", "preparing", "delivery"];
   if (nonCancellable.includes(booking.status)) {
     throw badRequest(`Cannot cancel a booking with status "${booking.status}"`);
   }
@@ -387,18 +405,29 @@ export async function handleBillplzCallback(body) {
   const payment = await Payment.findOne({ gatewayTransactionId: id });
   if (!payment) throw notFound("Payment not found");
 
+  const isPaid = paid === "true";
+  const paidAmount = paid_amount ? Number(paid_amount) : 0;
+
+  if (payment.frameOrder) {
+    const order = await FrameOrder.findById(payment.frameOrder);
+    if (!order) throw notFound("Frame order not found");
+    await applyFrameOrderPaymentResult(payment, order, isPaid, paidAmount);
+    return;
+  }
+
   const booking = await Booking.findById(payment.booking)
     .populate("graduate", "fullName email phone")
     .populate("package", "name price services")
     .populate("addons", "name price");
   if (!booking) throw notFound();
 
-  const isPaid = paid === "true";
-  await applyPaymentResult(payment, booking, isPaid, paid_amount ? Number(paid_amount) : 0);
+  await applyPaymentResult(payment, booking, isPaid, paidAmount);
 }
 
 export async function reconcilePaymentById(paymentDoc) {
   if (paymentDoc.paymentStatus !== "pending" || !paymentDoc.gatewayTransactionId) return false;
+
+  const isFrameOrderPayment = !!paymentDoc.frameOrder;
 
   let billData;
   try {
@@ -406,13 +435,21 @@ export async function reconcilePaymentById(paymentDoc) {
   } catch (err) {
     if (err.response?.status === 404) {
       const payment = paymentDoc.save ? paymentDoc : await Payment.findById(paymentDoc._id);
-      const booking = await Booking.findById(payment.booking)
-        .populate("graduate", "fullName email phone")
-        .populate("package", "name price services")
-        .populate("addons", "name price");
-      if (payment && booking) {
-        await applyPaymentResult(payment, booking, false, 0);
-        return true;
+      if (isFrameOrderPayment) {
+        const order = await FrameOrder.findById(payment.frameOrder);
+        if (payment && order) {
+          await applyFrameOrderPaymentResult(payment, order, false, 0);
+          return true;
+        }
+      } else {
+        const booking = await Booking.findById(payment.booking)
+          .populate("graduate", "fullName email phone")
+          .populate("package", "name price services")
+          .populate("addons", "name price");
+        if (payment && booking) {
+          await applyPaymentResult(payment, booking, false, 0);
+          return true;
+        }
       }
     }
     console.error(`[reconcile] Billplz API error for bill ${paymentDoc.gatewayTransactionId}:`, err.message);
@@ -420,18 +457,21 @@ export async function reconcilePaymentById(paymentDoc) {
   }
 
   const payment = paymentDoc.save ? paymentDoc : await Payment.findById(paymentDoc._id);
-  const booking = await Booking.findById(payment.booking)
-    .populate("graduate", "fullName email phone")
-    .populate("package", "name price services")
-    .populate("addons", "name price");
+  const isPaid = billData.paid === true;
+  const paidAmount = billData.paid_amount ? Number(billData.paid_amount) : 0;
 
-  if (!payment || !booking) return false;
+  if (isFrameOrderPayment) {
+    const order = await FrameOrder.findById(payment.frameOrder);
+    if (!payment || !order) return false;
+    await applyFrameOrderPaymentResult(payment, order, isPaid, paidAmount);
+  } else {
+    const booking = await Booking.findById(payment.booking)
+      .populate("graduate", "fullName email phone")
+      .populate("package", "name price services")
+      .populate("addons", "name price");
+    if (!payment || !booking) return false;
+    await applyPaymentResult(payment, booking, isPaid, paidAmount);
+  }
 
-  await applyPaymentResult(
-    payment,
-    booking,
-    billData.paid === true,
-    billData.paid_amount ? Number(billData.paid_amount) : 0
-  );
   return true;
 }

@@ -8,6 +8,11 @@ import {
   submitOrder,
   getWalletBalance,
   mergeAwb,
+  getFrameOrderPendingShipments,
+  getFrameOrderSubmittedShipments,
+  getFrameOrderQuotation,
+  submitFrameOrderShipment,
+  mergeFrameOrderAwb,
 } from "../controllers/shipmentController.js";
 
 const router = express.Router();
@@ -24,5 +29,12 @@ router.post("/merge-awb",   mergeAwb);
 router.post("/quotation", ensureEasyParcel, getQuotation);
 router.post("/submit",    ensureEasyParcel, submitOrder);
 router.get("/wallet",     ensureEasyParcel, getWalletBalance);
+
+// Frame order shipment routes
+router.get("/frame-orders/pending",        getFrameOrderPendingShipments);
+router.get("/frame-orders/submitted",      getFrameOrderSubmittedShipments);
+router.post("/frame-orders/merge-awb",     mergeFrameOrderAwb);
+router.post("/frame-orders/quotation",     ensureEasyParcel, getFrameOrderQuotation);
+router.post("/frame-orders/submit",        ensureEasyParcel, submitFrameOrderShipment);
 
 export default router;

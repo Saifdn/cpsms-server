@@ -1,27 +1,29 @@
-export function errorHandler(err, req, res, next) {
-  console.error(err);
+import { logger } from "../utils/logger.js";
 
-  // Mongoose: invalid ObjectId
+export function errorHandler(err, req, res, next) {
+  const context = { method: req.method, url: req.originalUrl, ip: req.ip };
+
   if (err.name === "CastError") {
+    logger.warn("Invalid ID format", context);
     return res.status(400).json({ success: false, message: "Invalid ID format" });
   }
 
-  // Mongoose: duplicate key
   if (err.code === 11000) {
+    logger.warn("Duplicate key violation", { ...context, keyValue: err.keyValue });
     return res.status(400).json({ success: false, message: "Email already exists" });
   }
 
-  // Mongoose: validation error
   if (err.name === "ValidationError") {
     const message = Object.values(err.errors).map((e) => e.message).join(", ");
+    logger.warn("Validation error", { ...context, message });
     return res.status(400).json({ success: false, message });
   }
 
-  // Operational errors thrown intentionally in service layer
   if (err.isOperational) {
+    logger.warn("Operational error", { ...context, statusCode: err.statusCode, message: err.message });
     return res.status(err.statusCode).json({ success: false, message: err.message });
   }
 
-  // Unhandled/unexpected errors — don't leak internals
+  logger.error("Unhandled server error", { ...context, stack: err.stack, message: err.message });
   res.status(500).json({ success: false, message: "Server error" });
 }
