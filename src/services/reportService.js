@@ -1,4 +1,5 @@
 import Booking from "../models/Booking.js";
+import FrameOrder from "../models/FrameOrder.js";
 import Session from "../models/Session.js";
 
 function parseDateParam(query) {
@@ -68,7 +69,11 @@ export async function getEventSummary(query) {
     ? { date: { $gte: startDate, $lte: endDate } }
     : {};
 
-  const [packageRows, addonRows, totalRows, allSessionDates] = await Promise.all([
+  const frameOrderDateFilter = startDate && endDate
+    ? { createdAt: { $gte: startDate, $lte: endDate } }
+    : {};
+
+  const [packageRows, addonRows, totalRows, allSessionDates, frameItemRows, frameOrderTotals] = await Promise.all([
     // Packages per session date
     Booking.aggregate([
       { $match: baseMatch },
@@ -125,6 +130,35 @@ export async function getEventSummary(query) {
       { $match: sessionDateFilter },
       { $group: { _id: "$date" } },
       { $sort: { _id: 1 } },
+    ]),
+
+    // Frame items sold — qty and revenue per frame type
+    FrameOrder.aggregate([
+      { $match: { paymentStatus: "paid", ...frameOrderDateFilter } },
+      { $unwind: "$items" },
+      { $lookup: { from: "frames", localField: "items.frame", foreignField: "_id", as: "frameDoc" } },
+      { $unwind: "$frameDoc" },
+      {
+        $group: {
+          _id: "$items.frame",
+          name:    { $first: "$frameDoc.name" },
+          qty:     { $sum: "$items.quantity" },
+          revenue: { $sum: { $multiply: ["$items.price", "$items.quantity"] } },
+        },
+      },
+      { $sort: { qty: -1 } },
+    ]),
+
+    // Total paid frame orders count + revenue
+    FrameOrder.aggregate([
+      { $match: { paymentStatus: "paid", ...frameOrderDateFilter } },
+      {
+        $group: {
+          _id: null,
+          totalOrders: { $sum: 1 },
+          totalRevenue: { $sum: "$totalPrice" },
+        },
+      },
     ]),
   ]);
 
@@ -215,8 +249,19 @@ export async function getEventSummary(query) {
 
   const packageBreakdown = [...overallPkgMap.values()].sort((a, b) => b.revenue - a.revenue);
   const addonBreakdown = [...overallAddonMap.values()].sort((a, b) => b.qty - a.qty);
-  const grandTotal = packageBreakdown.reduce((s, p) => s + p.revenue, 0)
+  const bookingRevenue = packageBreakdown.reduce((s, p) => s + p.revenue, 0)
     + addonBreakdown.reduce((s, a) => s + a.revenue, 0);
+
+  const frameOrders = {
+    totalOrders: frameOrderTotals[0]?.totalOrders ?? 0,
+    totalRevenue: frameOrderTotals[0]?.totalRevenue ?? 0,
+    frames: frameItemRows.map((r) => ({
+      frameId: r._id,
+      name: r.name,
+      qty: r.qty,
+      revenue: r.revenue,
+    })),
+  };
 
   return {
     period: {
@@ -230,7 +275,8 @@ export async function getEventSummary(query) {
       totalBookings: eventDays.reduce((s, d) => s + d.totalBookings, 0),
       packageBreakdown,
       addonBreakdown,
-      grandTotal,
+      frameOrders,
+      grandTotal: bookingRevenue + frameOrders.totalRevenue,
     },
   };
 }
@@ -256,7 +302,7 @@ export async function getDailyReport(query) {
 
   const baseMatch = { paymentStatus: "paid" };
 
-  const [packageRows, addonRows, totalRow, sessions] = await Promise.all([
+  const [packageRows, addonRows, totalRow, sessions, frameItemRows, frameOrderTotals] = await Promise.all([
     Booking.aggregate([
       { $match: baseMatch },
       ...sessionLookup,
@@ -308,6 +354,35 @@ export async function getDailyReport(query) {
       .select("startTime endTime capacity bookedCount")
       .sort({ startTime: 1 })
       .lean(),
+
+    // Frame items sold on this day
+    FrameOrder.aggregate([
+      { $match: { paymentStatus: "paid", createdAt: { $gte: dayStart, $lte: dayEnd } } },
+      { $unwind: "$items" },
+      { $lookup: { from: "frames", localField: "items.frame", foreignField: "_id", as: "frameDoc" } },
+      { $unwind: "$frameDoc" },
+      {
+        $group: {
+          _id: "$items.frame",
+          name:    { $first: "$frameDoc.name" },
+          qty:     { $sum: "$items.quantity" },
+          revenue: { $sum: { $multiply: ["$items.price", "$items.quantity"] } },
+        },
+      },
+      { $sort: { qty: -1 } },
+    ]),
+
+    // Total frame orders count + revenue for this day
+    FrameOrder.aggregate([
+      { $match: { paymentStatus: "paid", createdAt: { $gte: dayStart, $lte: dayEnd } } },
+      {
+        $group: {
+          _id: null,
+          totalOrders: { $sum: 1 },
+          totalRevenue: { $sum: "$totalPrice" },
+        },
+      },
+    ]),
   ]);
 
   const packages = packageRows.map((r) => ({
@@ -340,12 +415,24 @@ export async function getDailyReport(query) {
   const packageRevenue = packages.reduce((s, p) => s + p.revenue, 0);
   const addonRevenue = addons.reduce((s, a) => s + a.revenue, 0);
 
+  const frameOrders = {
+    totalOrders: frameOrderTotals[0]?.totalOrders ?? 0,
+    totalRevenue: frameOrderTotals[0]?.totalRevenue ?? 0,
+    frames: frameItemRows.map((r) => ({
+      frameId: r._id,
+      name: r.name,
+      qty: r.qty,
+      revenue: r.revenue,
+    })),
+  };
+
   return {
     date,
     sessions: sessionList,
     totalBookings: totalRow[0]?.totalBookings ?? 0,
     packages,
     addons,
-    grandTotal: packageRevenue + addonRevenue,
+    frameOrders,
+    grandTotal: packageRevenue + addonRevenue + frameOrders.totalRevenue,
   };
 }

@@ -6,7 +6,13 @@ const shipmentSchema = new mongoose.Schema(
     booking: {
       type: mongoose.Schema.Types.ObjectId,
       ref: "Booking",
-      required: true,
+      default: null,
+    },
+
+    frameOrder: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "FrameOrder",
+      default: null,
     },
 
     // EasyParcel Response Fields

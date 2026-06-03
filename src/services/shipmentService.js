@@ -1,6 +1,7 @@
 import axios from "axios";
 import { PDFDocument } from "pdf-lib";
 import Booking from "../models/Booking.js";
+import FrameOrder from "../models/FrameOrder.js";
 import Shipment from "../models/Shipment.js";
 import Session from "../models/Session.js";
 
@@ -349,4 +350,291 @@ export async function getWalletBalance(epToken) {
   } catch (err) {
     throw epError(err, "Failed to fetch wallet balance");
   }
+}
+
+// ─── Frame Order Shipment Functions ──────────────────────────────────────────
+
+async function paginateFrameOrders(filter, { page = 1, limit = 20 }, populateChain) {
+  const pageNum = Number(page);
+  const limitNum = Number(limit);
+  const skip = (pageNum - 1) * limitNum;
+
+  const [total, docs] = await Promise.all([
+    FrameOrder.countDocuments(filter),
+    populateChain(FrameOrder.find(filter).sort({ createdAt: -1 }).skip(skip).limit(limitNum)),
+  ]);
+
+  return {
+    data: docs,
+    count: docs.length,
+    pagination: { total, page: pageNum, limit: limitNum, totalPages: Math.ceil(total / limitNum) },
+  };
+}
+
+export async function getFrameOrderPendingShipments({ page, limit }) {
+  const filter = { status: "paid", shipment: { $exists: true, $ne: null } };
+
+  return paginateFrameOrders(filter, { page, limit }, (q) =>
+    q
+      .populate("graduate", "fullName email phone")
+      .populate("items.frame", "name")
+      .populate("shipment", "receiver status")
+      .select("items status orderNumber totalPrice")
+      .lean()
+  );
+}
+
+export async function getFrameOrderSubmittedShipments({ page, limit }) {
+  const filter = { status: { $in: ["preparing", "delivery"] } };
+
+  return paginateFrameOrders(filter, { page, limit }, (q) =>
+    q
+      .populate("graduate", "fullName email phone")
+      .populate("items.frame", "name")
+      .populate("shipment", "receiver status awb_number awb_url courierName tracking_url")
+      .select("items status orderNumber totalPrice")
+      .lean()
+  );
+}
+
+export async function getFrameOrderQuotation(frameOrderIds, epToken) {
+  if (!Array.isArray(frameOrderIds) || frameOrderIds.length === 0) {
+    throw badRequest("frameOrderIds array is required");
+  }
+
+  const orders = await FrameOrder.find({ _id: { $in: frameOrderIds } }).populate("shipment").lean();
+  if (orders.length === 0) throw notFound("No frame orders found");
+
+  const shipmentArray = orders.map((order) => {
+    const receiver = order.shipment?.receiver || {};
+    return {
+      sender: { postcode: "81310", subdivision_code: "MY-01", country: "MY" },
+      receiver: {
+        postcode: receiver.postcode,
+        subdivision_code: receiver.subdivision_code,
+        country: receiver.country_code,
+      },
+      weight: 0.5,
+      width: 15,
+      length: 40,
+      height: 4,
+      parcel_value: order.totalPrice,
+    };
+  });
+
+  let response;
+  try {
+    response = await axios.post(
+      `${EP_API}/shipment/quotations`,
+      { shipment: shipmentArray },
+      { headers: { Authorization: `Bearer ${epToken}` } }
+    );
+  } catch (err) {
+    throw epError(err, "Failed to get quotation from EasyParcel");
+  }
+
+  const allQuotations = response.data?.data || [];
+  const groupedByService = {};
+
+  allQuotations.forEach((item) => {
+    if (item.status !== "success" || !item.quotations) return;
+    item.quotations.forEach((quote) => {
+      const serviceId = quote.courier?.service_id;
+      if (!serviceId) return;
+
+      if (!groupedByService[serviceId]) {
+        groupedByService[serviceId] = {
+          serviceId,
+          serviceName: quote.courier?.service_name,
+          courierName: quote.courier?.courier_name,
+          courierLogo: quote.courier?.courier_logo,
+          deliveryDuration: quote.courier?.delivery_duration,
+          isPickup: quote.courier?.is_pickup,
+          totalAmount: 0,
+          count: 0,
+          minPrice: Infinity,
+          maxPrice: 0,
+        };
+      }
+
+      const price = parseFloat(quote.pricing?.total_amount || 0);
+      groupedByService[serviceId].totalAmount += price;
+      groupedByService[serviceId].count += 1;
+      groupedByService[serviceId].minPrice = Math.min(groupedByService[serviceId].minPrice, price);
+      groupedByService[serviceId].maxPrice = Math.max(groupedByService[serviceId].maxPrice, price);
+    });
+  });
+
+  const options = Object.values(groupedByService)
+    .map((o) => ({ ...o, averagePrice: (o.totalAmount / o.count).toFixed(2) }))
+    .sort((a, b) => a.totalAmount - b.totalAmount);
+
+  return { totalOrders: orders.length, totalQuotationsFound: options.length, options };
+}
+
+export async function submitFrameOrderShipment(
+  { frameOrderIds, serviceId, serviceName, courierName, sender, packageDetails, features, collectionDate },
+  epToken
+) {
+  if (!Array.isArray(frameOrderIds) || frameOrderIds.length === 0) {
+    throw badRequest("frameOrderIds array is required");
+  }
+  if (!serviceId) throw badRequest("serviceId is required");
+
+  const orders = await FrameOrder.find({ _id: { $in: frameOrderIds } })
+    .populate("shipment")
+    .populate("items.frame", "name");
+
+  if (orders.length === 0) throw notFound("No frame orders found");
+
+  const results = [];
+  const shipmentPayload = [];
+
+  for (const order of orders) {
+    if (!order.shipment) {
+      results.push({ frameOrderId: order._id, status: "failed", reason: "Shipment record not found" });
+      continue;
+    }
+
+    const receiver = order.shipment.receiver || {};
+    const itemNames = order.items.map((i) => i.frame?.name || "Frame").join(", ");
+    shipmentPayload.push({
+      reference: order.orderNumber,
+      service_id: serviceId,
+      collection_date: collectionDate,
+      weight: packageDetails?.weight || 0.5,
+      height: packageDetails?.height || 4,
+      length: packageDetails?.length || 40,
+      width: packageDetails?.width || 15,
+      item: [
+        {
+          content: itemNames || "Photo Frame(s)",
+          weight: packageDetails?.weight || 0.5,
+          height: packageDetails?.height || 4,
+          length: packageDetails?.length || 40,
+          width: packageDetails?.width || 15,
+          currency_code: "MYR",
+          value: order.totalPrice,
+          quantity: order.items.reduce((s, i) => s + i.quantity, 0),
+        },
+      ],
+      sender: {
+        name: sender.name,
+        company: sender.company,
+        phone_number_country_code: sender.phone_number_country_code,
+        phone_number: sender.phone_number,
+        email: sender.email,
+        address_1: sender.address_1,
+        address_2: sender.address_2 || "",
+        postcode: sender.postcode,
+        city: sender.city,
+        subdivision_code: sender.subdivision_code,
+        country_code: sender.country_code,
+      },
+      receiver: {
+        name: receiver.name,
+        phone_number_country_code: receiver.phone_number_country_code,
+        phone_number: receiver.phone_number,
+        email: receiver.email,
+        address_1: receiver.address_1,
+        address_2: receiver.address_2 || "",
+        postcode: receiver.postcode,
+        city: receiver.city,
+        subdivision_code: receiver.subdivision_code,
+        country_code: receiver.country_code,
+      },
+      feature: {
+        sms_tracking: features?.sms_tracking ?? false,
+        email_tracking: features?.email_tracking ?? true,
+        whatsapp_tracking: features?.whatsapp_tracking ?? true,
+      },
+    });
+  }
+
+  let epResponse = null;
+  if (shipmentPayload.length > 0) {
+    try {
+      epResponse = await axios.post(
+        `${EP_API}/shipment/submit_orders`,
+        { shipment: shipmentPayload },
+        { headers: { Authorization: `Bearer ${epToken}` } }
+      );
+    } catch (err) {
+      throw epError(err, "Failed to submit orders to EasyParcel");
+    }
+  }
+
+  const responseData = epResponse?.data?.data || [];
+
+  for (const orderData of responseData) {
+    for (const shipment of orderData.shipments || []) {
+      if (shipment.status !== "success") {
+        results.push({ reference: shipment.reference, status: "failed", reason: "EasyParcel shipment failed" });
+        continue;
+      }
+
+      const order = orders.find((o) => o.orderNumber === shipment.reference);
+      if (!order?.shipment) {
+        results.push({ reference: shipment.reference, status: "failed", reason: "Frame order not found from reference" });
+        continue;
+      }
+
+      await Shipment.findByIdAndUpdate(order.shipment._id, {
+        serviceId,
+        serviceName: serviceName || "",
+        courierName: courierName || "",
+        shipment_number: shipment.shipment_number,
+        awb_number: shipment.awb_number,
+        awb_url: shipment.awb_url,
+        tracking_url: shipment.tracking_url,
+        status: "confirmed",
+      });
+
+      await FrameOrder.findByIdAndUpdate(order._id, { status: "preparing" });
+
+      results.push({
+        frameOrderId: order._id,
+        orderNumber: order.orderNumber,
+        status: "success",
+        shipment_number: shipment.shipment_number,
+      });
+    }
+  }
+
+  const successCount = results.filter((r) => r.status === "success").length;
+  return { processed: frameOrderIds.length, successCount, results };
+}
+
+export async function mergeFrameOrderAwbPdfs(frameOrderIds) {
+  if (!Array.isArray(frameOrderIds) || frameOrderIds.length === 0) {
+    throw badRequest("frameOrderIds must be a non-empty array");
+  }
+
+  const shipments = await Shipment.find({
+    frameOrder: { $in: frameOrderIds },
+    awb_url: { $nin: [null, ""] },
+  })
+    .select("awb_url awb_number")
+    .lean();
+
+  if (shipments.length === 0) throw notFound("No AWB labels found for the given frame orders");
+
+  const merged = await PDFDocument.create();
+
+  await Promise.all(
+    shipments.map(async (s) => {
+      let bytes;
+      try {
+        const resp = await axios.get(s.awb_url, { responseType: "arraybuffer" });
+        bytes = resp.data;
+      } catch {
+        return;
+      }
+      const src = await PDFDocument.load(bytes);
+      const pages = await merged.copyPages(src, src.getPageIndices());
+      pages.forEach((p) => merged.addPage(p));
+    })
+  );
+
+  return merged.save();
 }

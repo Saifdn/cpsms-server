@@ -5,7 +5,13 @@ const paymentSchema = new mongoose.Schema(
     booking: {
       type: mongoose.Schema.Types.ObjectId,
       ref: "Booking",
-      required: true,
+      default: null,
+    },
+
+    frameOrder: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "FrameOrder",
+      default: null,
     },
     gateway: {
       type: String,

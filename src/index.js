@@ -19,6 +19,8 @@ import addonRoutes from "./routes/addonRoutes.js";
 import promoRoutes from "./routes/promoRoutes.js";
 import sessionRoutes from "./routes/sessionRoutes.js";
 import bookingRoutes from "./routes/bookingRoutes.js";
+import frameOrderRoutes from "./routes/frameOrderRoutes.js";
+import frameRoutes from "./routes/frameRoutes.js";
 import queueRoutes from "./routes/queueRoutes.js";
 import paymentRoutes from "./routes/paymentRoutes.js";
 import shipmentRoutes from "./routes/shipmentRoutes.js";
@@ -120,6 +122,8 @@ const startServer = async () => {
     app.use("/api/promos", promoRoutes);
     app.use("/api/sessions", sessionRoutes);
     app.use("/api/bookings", bookingRoutes);
+    app.use("/api/frame-orders", frameOrderRoutes);
+    app.use("/api/frames", frameRoutes);
     app.use("/api/queue", queueRoutes);
     app.use("/api/payments", paymentRoutes);
     app.use("/api/shipments", shipmentRoutes);
