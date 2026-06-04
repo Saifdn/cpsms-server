@@ -1,0 +1,16 @@
+process.env.JWT_ACCESS_SECRET = "test-access-secret-32chars-min!!";
+process.env.JWT_REFRESH_SECRET = "test-refresh-secret-32chars-min!";
+process.env.ACCESS_TOKEN_EXPIRY = "15m";
+process.env.REFRESH_TOKEN_EXPIRY = "7d";
+process.env.ENCRYPTION_KEY = "a".repeat(64);
+process.env.BILLPLZ_X_SIGNATURE = "test-x-sig-secret";
+process.env.BILLPLZ_API_KEY = "test-billplz-key";
+process.env.BILLPLZ_API_URL = "https://www.billplz-sandbox.com/api/v3";
+process.env.BILLPLZ_COLLECTION_ID = "test-collection";
+process.env.BILLPLZ_CALLBACK_URL = "http://localhost/callback";
+process.env.BILLPLZ_REDIRECT_URL = "http://localhost/redirect";
+process.env.CLIENT_URL = "http://localhost:5173";
+process.env.BACKEND_URL = "http://localhost:8000";
+process.env.RESEND_API_KEY = "re_test_key";
+process.env.EMAIL_FROM = "noreply@test.com";
+process.env.NODE_ENV = "test";
