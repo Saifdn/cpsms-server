@@ -32,7 +32,7 @@ function badRequest(message) {
 }
 
 function toTitleCase(str) {
-  return str.trim().replace(/\b\w/g, (c) => c.toUpperCase());
+  return str.trim().toLowerCase().replace(/\b\w/g, (c) => c.toUpperCase());
 }
 
 function normalizeReceiver(receiver) {

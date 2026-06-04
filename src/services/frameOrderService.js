@@ -25,7 +25,7 @@ function badRequest(message) {
 }
 
 function toTitleCase(str) {
-  return str.trim().replace(/\b\w/g, (c) => c.toUpperCase());
+  return str.trim().toLowerCase().replace(/\b\w/g, (c) => c.toUpperCase());
 }
 
 function normalizeReceiver(receiver) {
@@ -207,7 +207,7 @@ export async function adminCreateFrameOrder({ graduate: graduateId, items: rawIt
   const order = await FrameOrder.create({
     graduate: graduateId,
     items,
-    status: "paid",
+    status: "delivered",
     paymentStatus: "paid",
     totalPrice: totalAmount,
   });
