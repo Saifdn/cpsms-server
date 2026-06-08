@@ -35,7 +35,7 @@ import { checkIn, confirmArrival, skipCustomer, callNext, checkOut, getQueueLog,
 
 import { makeBooking, makeQueueEntry } from "../helpers/mockFactory.js";
 
-describe("checkIn", () => {
+describe("[Branch] checkIn — input validation and duplicate check branches", () => {
   beforeEach(() => jest.clearAllMocks());
 
   it("throws 400 when bookingNumber is missing", async () => {
@@ -75,7 +75,7 @@ describe("checkIn", () => {
   });
 });
 
-describe("confirmArrival", () => {
+describe("[Branch] confirmArrival — status and studio update branches", () => {
   beforeEach(() => jest.clearAllMocks());
 
   it("throws 400 when queueId is missing", async () => {
@@ -134,7 +134,7 @@ describe("confirmArrival", () => {
   });
 });
 
-describe("callNext", () => {
+describe("[Path] callNext — complete execution paths", () => {
   beforeEach(() => jest.clearAllMocks());
 
   it("throws 400 when studioId is missing", async () => {
@@ -160,7 +160,7 @@ describe("callNext", () => {
   });
 });
 
-describe("checkOut", () => {
+describe("[Path] checkOut — complete execution paths", () => {
   beforeEach(() => jest.clearAllMocks());
 
   it("throws 400 when queueId is missing", async () => {
@@ -187,7 +187,7 @@ describe("checkOut", () => {
   });
 });
 
-describe("getQueueLog", () => {
+describe("[DataFlow] getQueueLog — pagination data computation", () => {
   beforeEach(() => jest.clearAllMocks());
 
   it("returns paginated queue log", async () => {
@@ -207,7 +207,7 @@ describe("getQueueLog", () => {
   });
 });
 
-describe("getActiveQueue", () => {
+describe("[Path] getActiveQueue — delegation to model static method", () => {
   beforeEach(() => jest.clearAllMocks());
 
   it("delegates to Queue.getActiveQueue and returns its result", async () => {
@@ -221,7 +221,7 @@ describe("getActiveQueue", () => {
   });
 });
 
-describe("getQueueStatusByBooking", () => {
+describe("[Branch] getQueueStatusByBooking — status-based ahead count branches", () => {
   beforeEach(() => jest.clearAllMocks());
 
   it("throws 400 when bookingId is missing", async () => {
@@ -274,7 +274,7 @@ describe("getQueueStatusByBooking", () => {
   });
 });
 
-describe("skipCustomer", () => {
+describe("[DataFlow] skipCustomer — skippedCount increment and studio field reset", () => {
   beforeEach(() => jest.clearAllMocks());
 
   it("throws 400 when bookingId is missing", async () => {

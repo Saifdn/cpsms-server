@@ -102,7 +102,7 @@ function makeBillplzSignature(body) {
   return crypto.createHmac("sha256", process.env.BILLPLZ_X_SIGNATURE).update(sourceString).digest("hex");
 }
 
-describe("createBooking", () => {
+describe("[Branch] createBooking — pre-condition validation and conditional branches", () => {
   beforeEach(() => jest.clearAllMocks());
 
   it("throws 404 when session not found", async () => {
@@ -236,7 +236,7 @@ describe("createBooking", () => {
   });
 });
 
-describe("cancelBooking", () => {
+describe("[Branch] cancelBooking — status validation and session/queue update branches", () => {
   beforeEach(() => jest.clearAllMocks());
 
   it("throws 404 when booking not found", async () => {
@@ -344,7 +344,7 @@ describe("cancelBooking", () => {
   });
 });
 
-describe("handleBillplzCallback", () => {
+describe("[Branch] handleBillplzCallback — signature verification and payment routing branches", () => {
   beforeEach(() => jest.clearAllMocks());
 
   it("throws 400 when HMAC signature is invalid", async () => {
@@ -539,7 +539,7 @@ describe("handleBillplzCallback", () => {
   });
 });
 
-describe("adminCreateBooking", () => {
+describe("[Branch] adminCreateBooking — payment method and capacity validation branches", () => {
   beforeEach(() => jest.clearAllMocks());
 
   it("throws 404 when package not found", async () => {
@@ -610,7 +610,7 @@ describe("adminCreateBooking", () => {
   });
 });
 
-describe("reconcilePaymentById", () => {
+describe("[Path] reconcilePaymentById — complete execution paths", () => {
   beforeEach(() => jest.clearAllMocks());
 
   it("returns false immediately when payment is not pending", async () => {
@@ -664,7 +664,7 @@ describe("reconcilePaymentById", () => {
   });
 });
 
-describe("getBookingById", () => {
+describe("[Path] getBookingById — not found vs found paths", () => {
   beforeEach(() => jest.clearAllMocks());
 
   it("throws 404 when booking not found", async () => {
@@ -682,7 +682,7 @@ describe("getBookingById", () => {
   });
 });
 
-describe("updateBooking", () => {
+describe("[Branch] updateBooking — field whitelist and not found branches", () => {
   beforeEach(() => jest.clearAllMocks());
 
   it("throws 404 when booking not found", async () => {
@@ -711,7 +711,7 @@ describe("updateBooking", () => {
   });
 });
 
-describe("getMyBookings", () => {
+describe("[Branch] getMyBookings — status filter branch", () => {
   beforeEach(() => jest.clearAllMocks());
 
   it("returns all bookings for a user", async () => {
@@ -742,7 +742,7 @@ describe("getMyBookings", () => {
   });
 });
 
-describe("getAllBookings", () => {
+describe("[Branch] getAllBookings — date filter and pagination branches", () => {
   beforeEach(() => jest.clearAllMocks());
 
   it("returns paginated bookings with no filters", async () => {
@@ -1132,5 +1132,95 @@ describe("reconcilePaymentById – additional branches", () => {
 
     expect(result).toBe(true);
     expect(applyFrameOrderPaymentResult).toHaveBeenCalledWith(payment, expect.anything(), true, 20000);
+  });
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Data Flow tests — explicitly track variable transformations
+// ─────────────────────────────────────────────────────────────────────────────
+
+describe("[DataFlow] createBooking — total amount calculation and Billplz amount conversion", () => {
+  beforeEach(() => jest.clearAllMocks());
+
+  it("totalAmount = package.price (no addons) → multiplied by 100 before sending to Billplz (RM to cents)", async () => {
+    Session.findById.mockResolvedValue(makeSession());
+    Package.findById.mockResolvedValue({ price: 150 });
+    Booking.create.mockResolvedValue(makeBooking());
+    Payment.create.mockResolvedValue(makePayment());
+    axios.post.mockResolvedValue({ data: { url: "https://pay.url", id: "bill-x" } });
+
+    await createBooking({ session: "s1", package: "p1", graduate: "g1", addons: [] }, FAKE_USER);
+
+    const sentAmount = axios.post.mock.calls[0][1].amount;
+    expect(sentAmount).toBe(150 * 100);
+  });
+
+  it("totalAmount = package.price + sum(addon.prices) — each addon price flows into the running total", async () => {
+    Session.findById.mockResolvedValue(makeSession());
+    Package.findById.mockResolvedValue({ price: 150 });
+    Addon.find.mockReturnValue({ lean: jest.fn().mockResolvedValue([{ price: 20 }, { price: 30 }]) });
+    Booking.create.mockResolvedValue(makeBooking());
+    Payment.create.mockResolvedValue(makePayment());
+    axios.post.mockResolvedValue({ data: { url: "https://pay.url", id: "bill-x" } });
+
+    await createBooking({ session: "s1", package: "p1", graduate: "g1", addons: ["a1", "a2"] }, FAKE_USER);
+
+    expect(axios.post.mock.calls[0][1].amount).toBe(200 * 100);
+  });
+});
+
+describe("[DataFlow] handleBillplzCallback — payment amount conversion and booking state transitions", () => {
+  beforeEach(() => jest.clearAllMocks());
+
+  it("paid_amount in cents → payment.paidAmount in RM (15000 cents → 150 RM)", async () => {
+    const body = { id: "bill-123", paid: "true", paid_amount: "15000" };
+    const sig = makeBillplzSignature(body);
+    const payment = makePayment({ gatewayTransactionId: "bill-123", paymentStatus: "pending" });
+    Payment.findOne.mockResolvedValue(payment);
+
+    const booking = makeBooking({ status: "pending", paymentStatus: "pending" });
+    booking.bookingNumber = "BK-001";
+    const chain = { populate: jest.fn().mockReturnThis(), then: (resolve) => Promise.resolve(booking).then(resolve) };
+    Booking.findById.mockReturnValue(chain);
+    Session.findById.mockResolvedValue(makeSession({ bookedCount: 0, capacity: 5 }));
+    sendBookingConfirmation.mockResolvedValue(undefined);
+
+    await handleBillplzCallback({ ...body, x_signature: sig });
+
+    expect(payment.paidAmount).toBe(150);
+  });
+
+  it("payment.paidAmount → booking.totalPrice (value flows from payment record into booking record)", async () => {
+    const body = { id: "bill-123", paid: "true", paid_amount: "15000" };
+    const sig = makeBillplzSignature(body);
+    const payment = makePayment({ gatewayTransactionId: "bill-123", paymentStatus: "pending" });
+    Payment.findOne.mockResolvedValue(payment);
+
+    const booking = makeBooking({ status: "pending", paymentStatus: "pending" });
+    booking.bookingNumber = "BK-001";
+    const chain = { populate: jest.fn().mockReturnThis(), then: (resolve) => Promise.resolve(booking).then(resolve) };
+    Booking.findById.mockReturnValue(chain);
+    Session.findById.mockResolvedValue(makeSession({ bookedCount: 0, capacity: 5 }));
+    sendBookingConfirmation.mockResolvedValue(undefined);
+
+    await handleBillplzCallback({ ...body, x_signature: sig });
+
+    expect(booking.totalPrice).toBe(payment.paidAmount);
+  });
+});
+
+describe("[DataFlow] cancelBooking — session bookedCount state transitions", () => {
+  beforeEach(() => jest.clearAllMocks());
+
+  it("session status transitions from 'full' back to 'available' when bookedCount drops below capacity", async () => {
+    const booking = makeBooking({ status: "booked", paymentStatus: "paid", session: "s1" });
+    Booking.findById.mockResolvedValue(booking);
+    const session = makeSession({ bookedCount: 3, capacity: 3, status: "full" });
+    Session.findById.mockResolvedValue(session);
+
+    await cancelBooking("id1");
+
+    expect(session.bookedCount).toBe(2);
+    expect(session.status).toBe("available");
   });
 });

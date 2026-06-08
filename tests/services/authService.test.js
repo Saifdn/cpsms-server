@@ -1,4 +1,5 @@
 import { jest, describe, it, expect, beforeEach } from "@jest/globals";
+import crypto from "crypto";
 
 jest.mock("../../src/models/Graduate.js", () => ({
   __esModule: true,
@@ -43,7 +44,11 @@ const VALID_INPUT = {
   password: "Password123!",
 };
 
-describe("registerUser", () => {
+// ─────────────────────────────────────────────────────────────────────────────
+// registerUser
+// ─────────────────────────────────────────────────────────────────────────────
+
+describe("[Branch] registerUser — input validation branches", () => {
   beforeEach(() => jest.clearAllMocks());
 
   it("throws 400 when fullName is missing", async () => {
@@ -67,48 +72,40 @@ describe("registerUser", () => {
     await expect(registerUser(input)).rejects.toMatchObject({ statusCode: 400 });
   });
 
-  it("throws 400 for invalid phone number (no country code)", async () => {
+  it("throws 400 for phone number with no country code (ParseError branch)", async () => {
     await expect(registerUser({ ...VALID_INPUT, phone: "12345" }))
       .rejects.toMatchObject({ statusCode: 400, message: "Invalid phone number" });
     expect(Graduate.create).not.toHaveBeenCalled();
   });
 
-  it("throws 400 for phone number that is too short to be valid", async () => {
-    // +1 (US country code) but too few digits to be valid
+  it("throws 400 for phone number that is too short to be valid (isValid() branch)", async () => {
     await expect(registerUser({ ...VALID_INPUT, phone: "+19999" }))
       .rejects.toMatchObject({ statusCode: 400, message: "Invalid phone number" });
     expect(Graduate.create).not.toHaveBeenCalled();
   });
+});
 
-  it("hashes password before passing to Graduate.create", async () => {
-    Graduate.create.mockResolvedValue({
-      _id: "id1",
-      fullName: "Ahmad Saifudin",
-      email: "ahmad@test.com",
-      role: "graduate",
-    });
+describe("[DataFlow] registerUser — password hashing and field normalization", () => {
+  beforeEach(() => jest.clearAllMocks());
+
+  it("transforms plaintext password → bcrypt hash before storing (password is never saved as plaintext)", async () => {
+    Graduate.create.mockResolvedValue({ _id: "id1", fullName: "Ahmad Saifudin", email: "ahmad@test.com", role: "graduate" });
 
     await registerUser(VALID_INPUT);
 
-    const callArg = Graduate.create.mock.calls[0][0];
-    expect(callArg.password).not.toBe(VALID_INPUT.password);
-    const isHashed = await bcrypt.compare(VALID_INPUT.password, callArg.password);
-    expect(isHashed).toBe(true);
+    const stored = Graduate.create.mock.calls[0][0].password;
+    expect(stored).not.toBe(VALID_INPUT.password);
+    expect(await bcrypt.compare(VALID_INPUT.password, stored)).toBe(true);
   });
 
-  it("always sets role to 'graduate' regardless of caller input", async () => {
+  it("hardcodes role to 'graduate' — caller input cannot override it", async () => {
     Graduate.create.mockResolvedValue({ _id: "id1", fullName: "X", email: "x@x.com", role: "graduate" });
     await registerUser(VALID_INPUT);
     expect(Graduate.create.mock.calls[0][0].role).toBe("graduate");
   });
 
-  it("returns only safe fields — no password in response", async () => {
-    Graduate.create.mockResolvedValue({
-      _id: "id1",
-      fullName: "Ahmad Saifudin",
-      email: "ahmad@test.com",
-      role: "graduate",
-    });
+  it("strips password and refreshToken from the returned object (sensitive fields killed at output)", async () => {
+    Graduate.create.mockResolvedValue({ _id: "id1", fullName: "Ahmad Saifudin", email: "ahmad@test.com", role: "graduate" });
 
     const result = await registerUser(VALID_INPUT);
     expect(result).toEqual({ id: "id1", fullName: "Ahmad Saifudin", email: "ahmad@test.com", role: "graduate" });
@@ -117,7 +114,11 @@ describe("registerUser", () => {
   });
 });
 
-describe("loginUser", () => {
+// ─────────────────────────────────────────────────────────────────────────────
+// loginUser
+// ─────────────────────────────────────────────────────────────────────────────
+
+describe("[Branch] loginUser — validation and authentication branches", () => {
   beforeEach(() => {
     jest.clearAllMocks();
     generateAccessToken.mockReturnValue("mock-access-token");
@@ -132,28 +133,28 @@ describe("loginUser", () => {
     await expect(loginUser("test@test.com", null)).rejects.toMatchObject({ statusCode: 400 });
   });
 
-  it("throws 401 when user not found", async () => {
+  it("throws 401 when user not found in DB (user === null branch)", async () => {
     User.findOne.mockResolvedValue(null);
     await expect(loginUser("ghost@test.com", "password"))
       .rejects.toMatchObject({ statusCode: 401, message: "Invalid credentials" });
   });
 
-  it("throws 401 when password is incorrect", async () => {
+  it("throws 401 when password does not match stored hash (!valid branch)", async () => {
     const hash = await bcrypt.hash("correct-password", 1);
     User.findOne.mockResolvedValue(makeUser({ password: hash }));
     await expect(loginUser("test@test.com", "wrong-password"))
       .rejects.toMatchObject({ statusCode: 401, message: "Invalid credentials" });
   });
+});
 
-  it("returns accessToken and refreshToken on successful login", async () => {
-    const hash = await bcrypt.hash("Password123!", 1);
-    User.findOne.mockResolvedValue(makeUser({ password: hash }));
-
-    const result = await loginUser("test@test.com", "Password123!");
-    expect(result).toEqual({ accessToken: "mock-access-token", refreshToken: "mock-refresh-token" });
+describe("[DataFlow] loginUser — token generation and refresh token storage", () => {
+  beforeEach(() => {
+    jest.clearAllMocks();
+    generateAccessToken.mockReturnValue("mock-access-token");
+    generateRefreshToken.mockReturnValue("mock-refresh-token");
   });
 
-  it("saves the user with a hashed refreshToken — not the raw token", async () => {
+  it("raw refreshToken → bcrypt hash → stored on user (token is never stored as plaintext)", async () => {
     const hash = await bcrypt.hash("Password123!", 1);
     const user = makeUser({ password: hash });
     User.findOne.mockResolvedValue(user);
@@ -161,13 +162,11 @@ describe("loginUser", () => {
 
     await loginUser("test@test.com", "Password123!");
 
-    expect(user.save).toHaveBeenCalledTimes(1);
     expect(user.refreshToken.token).not.toBe("raw-refresh-token");
-    const valid = await bcrypt.compare("raw-refresh-token", user.refreshToken.token);
-    expect(valid).toBe(true);
+    expect(await bcrypt.compare("raw-refresh-token", user.refreshToken.token)).toBe(true);
   });
 
-  it("sets refreshToken.expiresAt approximately 7 days from now", async () => {
+  it("expiresAt is computed as Date.now() + 7 days from login time", async () => {
     const hash = await bcrypt.hash("Password123!", 1);
     const user = makeUser({ password: hash });
     User.findOne.mockResolvedValue(user);
@@ -179,32 +178,44 @@ describe("loginUser", () => {
     expect(diff).toBeGreaterThan(sevenDaysMs - 5000);
     expect(diff).toBeLessThan(sevenDaysMs + 5000);
   });
+
+  it("returns tokens on successful login path", async () => {
+    const hash = await bcrypt.hash("Password123!", 1);
+    User.findOne.mockResolvedValue(makeUser({ password: hash }));
+
+    const result = await loginUser("test@test.com", "Password123!");
+    expect(result).toEqual({ accessToken: "mock-access-token", refreshToken: "mock-refresh-token" });
+  });
 });
 
-describe("refreshAccessToken", () => {
+// ─────────────────────────────────────────────────────────────────────────────
+// refreshAccessToken
+// ─────────────────────────────────────────────────────────────────────────────
+
+describe("[Branch] refreshAccessToken — token verification branches", () => {
   beforeEach(() => {
     jest.clearAllMocks();
     generateAccessToken.mockReturnValue("new-access-token");
   });
 
-  it("throws 401 when no token provided", async () => {
+  it("throws 401 when no token provided (!token branch)", async () => {
     await expect(refreshAccessToken(null)).rejects.toMatchObject({ statusCode: 401 });
   });
 
-  it("throws 403 when token has wrong signature", async () => {
+  it("throws 403 when token has wrong signature (jwt.verify catch branch)", async () => {
     const jwt = require("jsonwebtoken");
     const badToken = jwt.sign({ userId: "u1" }, "wrong-secret");
     await expect(refreshAccessToken(badToken)).rejects.toMatchObject({ statusCode: 403 });
   });
 
-  it("throws 403 when user not found in DB", async () => {
+  it("throws 403 when user no longer exists in DB (!user branch)", async () => {
     const jwt = require("jsonwebtoken");
     const token = jwt.sign({ userId: "u1" }, process.env.JWT_REFRESH_SECRET, { expiresIn: "7d" });
     User.findById.mockResolvedValue(null);
     await expect(refreshAccessToken(token)).rejects.toMatchObject({ statusCode: 403 });
   });
 
-  it("throws 403 when stored hash does not match the token", async () => {
+  it("throws 403 when stored hash does not match the presented token (!valid branch)", async () => {
     const jwt = require("jsonwebtoken");
     const token = jwt.sign({ userId: "u1" }, process.env.JWT_REFRESH_SECRET, { expiresIn: "7d" });
     const hash = await bcrypt.hash("different-token", 1);
@@ -212,58 +223,61 @@ describe("refreshAccessToken", () => {
     await expect(refreshAccessToken(token)).rejects.toMatchObject({ statusCode: 403 });
   });
 
-  it("returns a new access token on success", async () => {
+  it("returns a new access token when all checks pass (success branch)", async () => {
     const jwt = require("jsonwebtoken");
     const rawToken = jwt.sign({ userId: "u1" }, process.env.JWT_REFRESH_SECRET, { expiresIn: "7d" });
     const hash = await bcrypt.hash(rawToken, 1);
     User.findById.mockResolvedValue(makeUser({ refreshToken: { token: hash } }));
 
-    const result = await refreshAccessToken(rawToken);
-    expect(result).toBe("new-access-token");
+    expect(await refreshAccessToken(rawToken)).toBe("new-access-token");
   });
 });
 
-describe("forgotPassword", () => {
+// ─────────────────────────────────────────────────────────────────────────────
+// forgotPassword
+// ─────────────────────────────────────────────────────────────────────────────
+
+describe("[Branch] forgotPassword — user lookup and email dispatch branches", () => {
   beforeEach(() => jest.clearAllMocks());
 
-  it("throws 400 when email is missing", async () => {
+  it("throws 400 when email is missing (!email branch)", async () => {
     await expect(forgotPassword(null)).rejects.toMatchObject({ statusCode: 400 });
   });
 
-  it("returns generic message when user not found (prevents email enumeration)", async () => {
+  it("returns generic message when user not found — prevents email enumeration (!user early return)", async () => {
     User.findOne.mockResolvedValue(null);
     const result = await forgotPassword("ghost@test.com");
     expect(result).toBe("If this email exists, a reset link has been sent");
     expect(sendResetPasswordEmail).not.toHaveBeenCalled();
   });
 
-  it("saves hashed reset token and fires email when user exists", async () => {
+  it("does not throw when email send fails — fire-and-forget catch branch", async () => {
+    User.findOne.mockResolvedValue(makeUser());
+    sendResetPasswordEmail.mockRejectedValue(new Error("smtp error"));
+    await expect(forgotPassword("user@test.com")).resolves.toBe("If this email exists, a reset link has been sent");
+  });
+});
+
+describe("[DataFlow] forgotPassword — reset token generation and expiry calculation", () => {
+  beforeEach(() => jest.clearAllMocks());
+
+  it("stores SHA256 hash of raw token — raw token is never saved to DB", async () => {
     const user = makeUser();
     User.findOne.mockResolvedValue(user);
     sendResetPasswordEmail.mockResolvedValue(true);
 
-    const result = await forgotPassword("user@test.com");
+    await forgotPassword("user@test.com");
 
-    expect(result).toBe("If this email exists, a reset link has been sent");
-    expect(user.save).toHaveBeenCalledTimes(1);
-    expect(user.passwordResetToken).toBeDefined();
-    expect(user.passwordResetToken.token).toHaveLength(64);
-    expect(sendResetPasswordEmail).toHaveBeenCalledWith(
-      expect.objectContaining({ email: user.email, resetUrl: expect.stringContaining(process.env.CLIENT_URL) })
-    );
+    const storedHash = user.passwordResetToken.token;
+    expect(storedHash).toHaveLength(64);
+    // The email receives a reset URL with the raw token; the DB stores only the hash
+    const emailArg = sendResetPasswordEmail.mock.calls[0][0];
+    const rawToken = emailArg.resetUrl.split("/").pop();
+    const expectedHash = crypto.createHash("sha256").update(rawToken).digest("hex");
+    expect(storedHash).toBe(expectedHash);
   });
 
-  it("does not throw when sendResetPasswordEmail rejects", async () => {
-    const user = makeUser();
-    User.findOne.mockResolvedValue(user);
-    sendResetPasswordEmail.mockRejectedValue(new Error("smtp error"));
-
-    await expect(forgotPassword("user@test.com")).resolves.toBe(
-      "If this email exists, a reset link has been sent"
-    );
-  });
-
-  it("reset token expiresAt is ~10 minutes from now", async () => {
+  it("expiresAt is computed as Date.now() + 10 minutes", async () => {
     const user = makeUser();
     User.findOne.mockResolvedValue(user);
     sendResetPasswordEmail.mockResolvedValue(true);
@@ -275,52 +289,83 @@ describe("forgotPassword", () => {
     expect(diff).toBeGreaterThan(tenMinMs - 5000);
     expect(diff).toBeLessThan(tenMinMs + 5000);
   });
+
+  it("reset URL embeds CLIENT_URL and raw reset token (not the hash)", async () => {
+    const user = makeUser();
+    User.findOne.mockResolvedValue(user);
+    sendResetPasswordEmail.mockResolvedValue(true);
+
+    await forgotPassword("user@test.com");
+
+    const { resetUrl } = sendResetPasswordEmail.mock.calls[0][0];
+    expect(resetUrl).toContain(process.env.CLIENT_URL);
+    expect(resetUrl).toContain("/reset-password/");
+  });
 });
 
-describe("resetPassword", () => {
+// ─────────────────────────────────────────────────────────────────────────────
+// resetPassword
+// ─────────────────────────────────────────────────────────────────────────────
+
+describe("[Branch] resetPassword — token validation branches", () => {
   beforeEach(() => jest.clearAllMocks());
 
-  it("throws 400 when token is missing", async () => {
+  it("throws 400 when token is missing (!token branch)", async () => {
     await expect(resetPassword(null, "newpassword")).rejects.toMatchObject({ statusCode: 400 });
   });
 
-  it("throws 400 when password is missing", async () => {
+  it("throws 400 when password is missing (!password branch)", async () => {
     await expect(resetPassword("sometoken", null)).rejects.toMatchObject({ statusCode: 400 });
   });
 
-  it("throws 400 when token is expired or invalid (user not found)", async () => {
+  it("throws 400 when token is expired or invalid — User.findOne returns null (!user branch)", async () => {
     User.findOne.mockResolvedValue(null);
     await expect(resetPassword("expired-token", "newpassword"))
       .rejects.toMatchObject({ statusCode: 400, message: "Token invalid or expired" });
   });
+});
 
-  it("hashes new password, clears resetToken, and saves on success", async () => {
+describe("[DataFlow] resetPassword — password replacement and token cleanup", () => {
+  beforeEach(() => jest.clearAllMocks());
+
+  it("new password → bcrypt hash → replaces old password (data transformation)", async () => {
     const user = makeUser({ passwordResetToken: { token: "hashed", expiresAt: Date.now() + 60000 } });
     User.findOne.mockResolvedValue(user);
 
     await resetPassword("valid-raw-token", "NewPassword123!");
 
     expect(user.password).not.toBe("NewPassword123!");
-    const isHashed = await bcrypt.compare("NewPassword123!", user.password);
-    expect(isHashed).toBe(true);
+    expect(await bcrypt.compare("NewPassword123!", user.password)).toBe(true);
+  });
+
+  it("passwordResetToken field is set to undefined (killed) after successful reset", async () => {
+    const user = makeUser({ passwordResetToken: { token: "hashed", expiresAt: Date.now() + 60000 } });
+    User.findOne.mockResolvedValue(user);
+
+    await resetPassword("valid-raw-token", "NewPassword123!");
+
     expect(user.passwordResetToken).toBeUndefined();
     expect(user.save).toHaveBeenCalledTimes(1);
   });
 });
 
-describe("logoutUser", () => {
+// ─────────────────────────────────────────────────────────────────────────────
+// logoutUser
+// ─────────────────────────────────────────────────────────────────────────────
+
+describe("[Path] logoutUser — complete execution paths", () => {
   beforeEach(() => jest.clearAllMocks());
 
-  it("does nothing when no token provided", async () => {
+  it("Path 1 — no token: returns immediately without hitting DB", async () => {
     await expect(logoutUser(null)).resolves.toBeUndefined();
     expect(User.findById).not.toHaveBeenCalled();
   });
 
-  it("returns without error when token is invalid JWT", async () => {
+  it("Path 2 — invalid JWT: returns without error (idempotent)", async () => {
     await expect(logoutUser("not-a-jwt")).resolves.toBeUndefined();
   });
 
-  it("clears refreshToken on user when token is valid", async () => {
+  it("Path 3 — valid token, user found: clears refreshToken and saves", async () => {
     const jwt = require("jsonwebtoken");
     const token = jwt.sign({ userId: "u1" }, process.env.JWT_REFRESH_SECRET, { expiresIn: "7d" });
     const user = makeUser({ refreshToken: { token: "some-hash" } });

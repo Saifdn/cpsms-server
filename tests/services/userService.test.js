@@ -36,7 +36,7 @@ import {
   getUserMe,
 } from "../../src/services/userService.js";
 
-describe("createGraduate", () => {
+describe("[Branch] createGraduate — input validation and normalization", () => {
   beforeEach(() => {
     jest.clearAllMocks();
     sendWelcomeEmail.mockResolvedValue(true);
@@ -125,7 +125,7 @@ describe("createGraduate", () => {
   });
 });
 
-describe("updateGraduate", () => {
+describe("[Branch] updateGraduate — field whitelist and normalization", () => {
   beforeEach(() => jest.clearAllMocks());
 
   it("throws 404 when graduate not found", async () => {
@@ -172,7 +172,7 @@ describe("updateGraduate", () => {
   });
 });
 
-describe("listGraduates", () => {
+describe("[DataFlow] listGraduates — pagination metadata computation", () => {
   beforeEach(() => jest.clearAllMocks());
 
   it("returns paginated results with correct pagination metadata", async () => {
@@ -229,7 +229,7 @@ describe("listGraduates", () => {
   });
 });
 
-describe("createAdmin", () => {
+describe("[Branch] createAdmin — role validation branches", () => {
   beforeEach(() => {
     jest.clearAllMocks();
     sendWelcomeEmail.mockResolvedValue(true);
@@ -269,7 +269,7 @@ describe("createAdmin", () => {
   });
 });
 
-describe("createStaff", () => {
+describe("[Branch] createStaff — required field validation", () => {
   beforeEach(() => {
     jest.clearAllMocks();
     sendWelcomeEmail.mockResolvedValue(true);
@@ -290,7 +290,7 @@ describe("createStaff", () => {
   });
 });
 
-describe("getUserMe", () => {
+describe("[Path] getUserMe — not found vs found paths", () => {
   beforeEach(() => jest.clearAllMocks());
 
   it("throws 404 when user not found", async () => {
@@ -321,7 +321,7 @@ import {
   updateUserMe,
 } from "../../src/services/userService.js";
 
-describe("getGraduate", () => {
+describe("[Path] getGraduate — not found vs found paths", () => {
   beforeEach(() => jest.clearAllMocks());
 
   it("throws 404 when graduate not found", async () => {
@@ -337,7 +337,7 @@ describe("getGraduate", () => {
   });
 });
 
-describe("deleteGraduate", () => {
+describe("[Path] deleteGraduate — not found vs deleted paths", () => {
   beforeEach(() => jest.clearAllMocks());
 
   it("throws 404 when graduate not found", async () => {
@@ -351,7 +351,7 @@ describe("deleteGraduate", () => {
   });
 });
 
-describe("listAdmins", () => {
+describe("[DataFlow] listAdmins — pagination metadata computation", () => {
   beforeEach(() => jest.clearAllMocks());
 
   it("returns paginated admins", async () => {
@@ -368,7 +368,7 @@ describe("listAdmins", () => {
   });
 });
 
-describe("getAdmin", () => {
+describe("[Path] getAdmin — not found vs found paths", () => {
   beforeEach(() => jest.clearAllMocks());
 
   it("throws 404 when admin not found", async () => {
@@ -383,7 +383,7 @@ describe("getAdmin", () => {
   });
 });
 
-describe("deleteAdmin", () => {
+describe("[Path] deleteAdmin — not found vs deleted paths", () => {
   beforeEach(() => jest.clearAllMocks());
 
   it("throws 404 when admin not found", async () => {
@@ -397,7 +397,7 @@ describe("deleteAdmin", () => {
   });
 });
 
-describe("updateAdmin", () => {
+describe("[Branch] updateAdmin — not found vs updated branches", () => {
   beforeEach(() => jest.clearAllMocks());
 
   it("throws 404 when admin not found", async () => {
@@ -413,7 +413,7 @@ describe("updateAdmin", () => {
   });
 });
 
-describe("listStaff / getStaff / deleteStaff / updateStaff", () => {
+describe("[Branch] listStaff / getStaff / deleteStaff / updateStaff — field whitelist and not found branches", () => {
   beforeEach(() => jest.clearAllMocks());
 
   it("listStaff returns paginated results", async () => {
@@ -465,7 +465,7 @@ describe("listStaff / getStaff / deleteStaff / updateStaff", () => {
   });
 });
 
-describe("updateUserMe", () => {
+describe("[DataFlow] updateUserMe — field normalization before update", () => {
   beforeEach(() => jest.clearAllMocks());
 
   it("throws 404 when user not found", async () => {
