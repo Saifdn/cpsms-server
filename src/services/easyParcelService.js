@@ -30,11 +30,19 @@ function notFound(message = "Not found") {
 
 // ─── OAuth ────────────────────────────────────────────────────────────────────
 
-export function buildOAuthRedirectUrl(session, { userId, returnTo }) {
+const OAUTH_COOKIE_OPTIONS = {
+  httpOnly: true,
+  secure: process.env.NODE_ENV === "production",
+  sameSite: "lax",
+  signed: true,
+  maxAge: 1000 * 60 * 10, // 10 minutes
+};
+
+export function buildOAuthRedirectUrl(res, { userId, returnTo }) {
   const state = Math.random().toString(36).substring(2, 15);
-  session.oauthState = state;
-  session.oauthUserId = userId;
-  session.oauthReturnTo = returnTo || "/";
+  res.cookie("ep_oauth_state", state, OAUTH_COOKIE_OPTIONS);
+  res.cookie("ep_oauth_user", userId, OAUTH_COOKIE_OPTIONS);
+  res.cookie("ep_oauth_return", returnTo || "/", OAUTH_COOKIE_OPTIONS);
 
   const params = new URLSearchParams({
     client_id: process.env.EP_CLIENT_ID,
@@ -45,22 +53,32 @@ export function buildOAuthRedirectUrl(session, { userId, returnTo }) {
   return `https://api.easyparcel.com/oauth/login?${params}`;
 }
 
-export async function handleOAuthCallback(session, { code, state }) {
-  if (!state || state !== session.oauthState) {
+export async function handleOAuthCallback(req, res, { code, state }) {
+  const cookies = req.signedCookies || {};
+  const clearOAuthCookies = () => {
+    res.clearCookie("ep_oauth_state", OAUTH_COOKIE_OPTIONS);
+    res.clearCookie("ep_oauth_user", OAUTH_COOKIE_OPTIONS);
+    res.clearCookie("ep_oauth_return", OAUTH_COOKIE_OPTIONS);
+  };
+
+  if (!state || state !== cookies.ep_oauth_state) {
     logger.warn("[EasyParcel OAuth] state mismatch", {
       receivedState: state,
-      sessionState: session.oauthState,
+      cookieState: cookies.ep_oauth_state,
     });
+    clearOAuthCookies();
     return { redirect: `${FRONTEND_URL}?ep_error=invalid_state` };
   }
   if (!code) {
     logger.warn("[EasyParcel OAuth] missing code");
+    clearOAuthCookies();
     return { redirect: `${FRONTEND_URL}?ep_error=no_code` };
   }
 
-  const userId = session.oauthUserId;
+  const userId = cookies.ep_oauth_user;
   if (!userId) {
     logger.warn("[EasyParcel OAuth] session expired — no oauthUserId");
+    clearOAuthCookies();
     return { redirect: `${FRONTEND_URL}/login?ep_error=session_expired` };
   }
 
@@ -92,16 +110,15 @@ export async function handleOAuthCallback(session, { code, state }) {
       { upsert: true }
     );
 
-    const returnTo = session.oauthReturnTo || "/shipment-management";
-    delete session.oauthState;
-    delete session.oauthUserId;
-    delete session.oauthReturnTo;
+    const returnTo = cookies.ep_oauth_return || "/shipment-management";
+    clearOAuthCookies();
 
     return { redirect: `${FRONTEND_URL}${returnTo}` };
   } catch (err) {
     logger.error("[EasyParcel OAuth] token exchange failed", {
       error: err.response?.data || err.message,
     });
+    clearOAuthCookies();
     return { redirect: `${FRONTEND_URL}?ep_error=token_failed` };
   }
 }

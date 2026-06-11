@@ -9,12 +9,12 @@ export const startEasyParcelOAuth = (req, res) => {
     return res.redirect(`${FRONTEND_URL}/login`);
   }
 
-  const redirectUrl = easyParcelService.buildOAuthRedirectUrl(req.session, { userId, returnTo });
+  const redirectUrl = easyParcelService.buildOAuthRedirectUrl(res, { userId, returnTo });
   res.redirect(redirectUrl);
 };
 
 export const handleEasyParcelCallback = async (req, res) => {
-  const { redirect } = await easyParcelService.handleOAuthCallback(req.session, req.query);
+  const { redirect } = await easyParcelService.handleOAuthCallback(req, res, req.query);
   res.redirect(redirect);
 };
 

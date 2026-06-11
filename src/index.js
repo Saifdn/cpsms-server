@@ -2,7 +2,6 @@ import "./env.js";
 import express from "express";
 import http from "http";
 import cors from "cors";
-import session from "express-session";
 import { mkdirSync, writeFileSync } from "fs";
 import { join, dirname } from "path";
 import { fileURLToPath } from "url";
@@ -61,20 +60,9 @@ async function generateLogo() {
 const app = express();
 
 app.use(helmet());
-app.use(cookieParser());
+app.use(cookieParser(process.env.SESSION_SECRET || "dev-secret-change-in-prod"));
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
-
-app.use(session({
-  secret: process.env.SESSION_SECRET || "dev-secret-change-in-prod",
-  resave: false,
-  saveUninitialized: false,
-  cookie: {
-    secure: process.env.NODE_ENV === "production",
-    httpOnly: true,
-    maxAge: 1000 * 60 * 60 * 24,
-  },
-}));
 
 app.use(cors({
   origin: process.env.CLIENT_URL || "http://localhost:5173",
