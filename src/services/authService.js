@@ -37,7 +37,12 @@ export async function registerUser({ fullName, email, phone, password }) {
     throw badRequest("Please provide fullName, email, phone and password");
   }
 
-  const parsedPhone = parsePhoneNumber(phone);
+  let parsedPhone;
+  try {
+    parsedPhone = parsePhoneNumber(phone);
+  } catch {
+    throw badRequest("Invalid phone number");
+  }
   if (!parsedPhone?.isValid()) {
     throw badRequest("Invalid phone number");
   }

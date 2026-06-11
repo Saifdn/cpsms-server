@@ -4,6 +4,7 @@ import Shipment from "../models/Shipment.js";
 import Booking from "../models/Booking.js";
 import { getShipmentStatus } from "../utils/easyparcelStatus.js";
 import { encrypt, decrypt } from "../utils/crypto.js";
+import { logger } from "../utils/logger.js";
 import "dotenv/config";
 
 const FRONTEND_URL = process.env.CLIENT_URL || "http://localhost:5173";
@@ -46,14 +47,20 @@ export function buildOAuthRedirectUrl(session, { userId, returnTo }) {
 
 export async function handleOAuthCallback(session, { code, state }) {
   if (!state || state !== session.oauthState) {
+    logger.warn("[EasyParcel OAuth] state mismatch", {
+      receivedState: state,
+      sessionState: session.oauthState,
+    });
     return { redirect: `${FRONTEND_URL}?ep_error=invalid_state` };
   }
   if (!code) {
+    logger.warn("[EasyParcel OAuth] missing code");
     return { redirect: `${FRONTEND_URL}?ep_error=no_code` };
   }
 
   const userId = session.oauthUserId;
   if (!userId) {
+    logger.warn("[EasyParcel OAuth] session expired — no oauthUserId");
     return { redirect: `${FRONTEND_URL}/login?ep_error=session_expired` };
   }
 
@@ -92,7 +99,9 @@ export async function handleOAuthCallback(session, { code, state }) {
 
     return { redirect: `${FRONTEND_URL}${returnTo}` };
   } catch (err) {
-    console.error("[EasyParcel OAuth Error]", err.response?.data || err.message);
+    logger.error("[EasyParcel OAuth] token exchange failed", {
+      error: err.response?.data || err.message,
+    });
     return { redirect: `${FRONTEND_URL}?ep_error=token_failed` };
   }
 }
